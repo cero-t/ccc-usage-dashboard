@@ -1,0 +1,15 @@
+codex-usage-dashboard
+Copyright 2026 Shin Tanimoto
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+---------------------------------------------------------------------
+Bundled third-party components
+---------------------------------------------------------------------
+
+Apache ECharts
+  Bundled at: src/main/resources/META-INF/resources/echarts.min.js
+  Copyright The Apache Software Foundation
+  Licensed under the Apache License, Version 2.0
+  https://github.com/apache/echarts

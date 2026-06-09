@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>codex-usage-dashboard</title>
+<link rel="icon" href="data:,">
+<script src="echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --panel2: #1f232c; --line: #2a2f3a;
+    --fg: #e6e9ef; --muted: #8b93a3; --accent: #5b8cff; --good: #43c59e;
+    --warn: #e0a458; --bad: #e0586b; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 16px 22px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .header-right { display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap; margin-left: auto; }
+  .status-stack { display: grid; justify-items: start; gap: 2px; line-height: 1.25; }
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .controls label { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  select { appearance: none; color: var(--fg); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 28px 5px 9px; font: inherit; font-size: 12px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 13px) 50%, calc(100% - 8px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+  main { padding: 18px 22px 60px; max-width: 1280px; margin: 0 auto; }
+  section { margin-top: 22px; }
+  section > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .top-grid { display: grid; grid-template-columns: minmax(210px, .78fr) repeat(2, minmax(220px, 1fr)); gap: 18px; align-items: stretch; }
+  .metrics { display: grid; gap: 12px; align-content: stretch; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card .k { color: var(--muted); font-size: 12px; }
+  .card .v { font-size: 22px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .card .v small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid2, .top-grid { grid-template-columns: 1fr; } }
+  .chart { width: 100%; height: 320px; }
+  .chart.sm { height: 290px; }
+  .chart.donut { height: 260px; min-height: 220px; }
+  .chart.gauge { height: 200px; position: relative; }
+  .gauge-reset { position: absolute; top: 6px; right: 8px; z-index: 1; color: var(--muted);
+    font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .chart.no-data { display: grid; place-items: center; color: var(--muted); }
+  .distribution { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr); gap: 14px; align-items: stretch; }
+  @media (max-width: 720px) { .distribution { grid-template-columns: 1fr; } }
+  .breakdown { min-height: 290px; display: grid; align-content: start; gap: 12px; padding: 4px 0; }
+  .breakdown.compact { min-height: 260px; }
+  .breakdown-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: baseline; }
+  .breakdown-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .swatch { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+  .breakdown-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .breakdown-values { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .breakdown-bar { grid-column: 1 / -1; height: 7px; background: var(--panel2); border-radius: 999px; overflow: hidden; }
+  .breakdown-fill { height: 100%; border-radius: inherit; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; }
+  td.mono { font-family: var(--mono); font-size: 12.5px; }
+  td.msg { max-width: 440px; overflow: hidden; text-overflow: ellipsis; }
+  .muted { color: var(--muted); } .err { color: var(--bad); } .warn { color: var(--warn); }
+  .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
+  .pill.ev { color: var(--accent); border-color: #2f3a52; }
+  .pill.ev-err { color: var(--bad); border-color: #4a2730; }
+  #err { color: var(--bad); font-size: 12px; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--good); margin-right:6px; vertical-align: middle;}
+  tr.rowlink { cursor: pointer; }
+  tr.rowlink:hover td { background: var(--panel2); }
+  /* raw-log drill-down modal */
+  .modal { display: none; position: fixed; inset: 0; z-index: 50; padding: 24px;
+    background: rgba(0,0,0,.62); align-items: center; justify-content: center; }
+  .modal.open { display: flex; }
+  .modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    width: 100%; max-width: 920px; max-height: 84vh; display: flex; flex-direction: column; }
+  .modal-head { display: flex; align-items: center; gap: 10px; padding: 11px 15px;
+    border-bottom: 1px solid var(--line); font-size: 13px; }
+  .modal-head .spacer { flex: 1; }
+  .modal-x { background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; cursor: pointer; padding: 3px 10px; font: inherit; font-size: 13px; }
+  .modal-body { margin: 0; padding: 14px 16px; overflow: auto; font-family: var(--mono);
+    font-size: 12px; line-height: 1.5; white-space: pre; color: var(--fg); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span>codex-usage-dashboard</h1>
+  <span class="sub">Codex usage, credits &amp; attribution — local OTLP pipeline</span>
+  <span class="spacer"></span>
+  <div class="header-right">
+    <div class="controls">
+      <label>Range <select id="rangeSelect"></select></label>
+      <label>Grain <select id="grainSelect"></select></label>
+    </div>
+    <div class="status-stack">
+      <span class="sub" id="updated">updated —</span>
+      <span class="sub" id="received">received —</span>
+    </div>
+    <span id="err"></span>
+  </div>
+</header>
+<main>
+  <section class="top-grid">
+    <div class="metrics" id="cards"></div>
+    <div class="panel"><div id="gauge5h" class="chart gauge"></div></div>
+    <div class="panel"><div id="gaugeWeekly" class="chart gauge"></div></div>
+  </section>
+
+  <section>
+    <h2>Usage % × Credit by type</h2>
+    <div class="panel"><div id="overlay" class="chart"></div></div>
+  </section>
+
+  <section>
+    <h2>Credit by trigger (over time)</h2>
+    <div class="panel"><div id="triggerArea" class="chart"></div></div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <h2>Credit by model</h2>
+      <div class="panel">
+        <div class="distribution">
+          <div id="modelDonut" class="chart donut"></div>
+          <div id="modelBreakdown" class="breakdown compact"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2>Credit by trigger</h2>
+      <div class="panel">
+        <div class="distribution">
+          <div id="triggerDonut" class="chart donut"></div>
+          <div id="triggerBreakdown" class="breakdown compact"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Credit by model × trigger</h2>
+    <div class="panel" style="overflow-x:auto"><div id="modelTrigger"></div></div>
+  </section>
+
+  <section>
+    <h2>Recent completion events</h2>
+    <div class="panel" style="overflow-x:auto"><div id="recent"></div></div>
+  </section>
+
+  <section>
+    <h2>Recent errors</h2>
+    <div class="panel" style="overflow-x:auto"><div id="errors"></div></div>
+  </section>
+</main>
+
+<div id="modal" class="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span id="modalTitle">raw log</span>
+      <span class="sub" id="modalSub"></span>
+      <span class="spacer"></span>
+      <button id="modalClose" class="modal-x">✕ close</button>
+    </div>
+    <pre id="modalBody" class="modal-body"></pre>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 0) => n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+const esc = (s) => s == null ? "" : String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const shortId = (s) => s ? String(s).slice(0, 8) : "";
+const eventCount = (n) => `${fmt(n)} ${Number(n) === 1 ? "event" : "events"}`;
+const pad2 = (n) => String(n).padStart(2, "0");
+const formatDateTime = (value) => {
+  if (!value) return "—";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) return value;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+};
+const formatResetAt = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const d = new Date(n < 1e12 ? n * 1000 : n);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+
+const DEFAULT_RANGE = "6h";
+const DEFAULT_GRAIN = "5m";
+const RANGES = [
+  { id: "15m", label: "15 min", ms: 15 * 60 * 1000 },
+  { id: "30m", label: "30 min", ms: 30 * 60 * 1000 },
+  { id: "1h", label: "1 hour", ms: 60 * 60 * 1000 },
+  { id: "3h", label: "3 hours", ms: 3 * 60 * 60 * 1000 },
+  { id: "6h", label: "6 hours", ms: 6 * 60 * 60 * 1000 },
+  { id: "12h", label: "12 hours", ms: 12 * 60 * 60 * 1000 },
+  { id: "1d", label: "1 day", ms: 24 * 60 * 60 * 1000 },
+  { id: "3d", label: "3 days", ms: 3 * 24 * 60 * 60 * 1000 },
+  { id: "1w", label: "1 week", ms: 7 * 24 * 60 * 60 * 1000 },
+  { id: "30d", label: "30 days", ms: 30 * 24 * 60 * 60 * 1000 },
+  { id: "6mo", label: "6 months", months: 6 },
+];
+const GRAINS = [
+  { id: "1m", label: "1 min", ms: 60 * 1000 },
+  { id: "5m", label: "5 min", ms: 5 * 60 * 1000 },
+  { id: "30m", label: "30 min", ms: 30 * 60 * 1000 },
+  { id: "1h", label: "1 hour", ms: 60 * 60 * 1000 },
+  { id: "12h", label: "12 hours", ms: 12 * 60 * 60 * 1000 },
+  { id: "1d", label: "1 day", ms: 24 * 60 * 60 * 1000 },
+];
+const byId = (items) => Object.fromEntries(items.map(x => [x.id, x]));
+const RANGE_BY_ID = byId(RANGES);
+const GRAIN_BY_ID = byId(GRAINS);
+const params = new URLSearchParams(location.search);
+const state = {
+  range: RANGE_BY_ID[params.get("range")] ? params.get("range") : DEFAULT_RANGE,
+  grain: GRAIN_BY_ID[params.get("grain")] ? params.get("grain") : DEFAULT_GRAIN,
+};
+
+// Stable colors per attribution category; unknown keys fall back to the palette.
+const PALETTE = ["#5b8cff", "#43c59e", "#e0a458", "#e0586b", "#9d7bff", "#4dd0e1", "#c2cc4d"];
+const TRIGGER_COLORS = { user: "#5b8cff", ambient: "#e0a458", memory: "#43c59e", background: "#6b7280", unknown: "#8b93a3" };
+const TYPE_COLORS = { uncached_input: "#56b4e9", cached_input: "#e69f00", output: "#009e73" };
+const USAGE_WINDOWS = {
+  primary: { label: "5h", color: "#f0e442" },
+  secondary: { label: "weekly", color: "#cc79a7" },
+};
+const colorFor = (key, map, i) => map[key] || PALETTE[i % PALETTE.length];
+const usageWindow = (key) => USAGE_WINDOWS[key] || { label: key || "usage", color: "#e0a458" };
+const latestUsage = (summary, key) => (summary.usage || []).find(u => u.window === key);
+
+// Friendly labels for the Codex OTel event names, so a no-token / no-model row
+// reads as "what kind of event" instead of looking empty. Unknown names just drop
+// the "codex." prefix.
+const EVENT_LABELS = {
+  "codex.sse_event": "completion",
+  "codex.api_request": "api request",
+  "codex.websocket_connect": "ws connect",
+  "codex.conversation_starts": "conversation",
+  "codex.user_prompt": "user prompt",
+  "codex.tool_decision": "tool decision",
+  "codex.tool_result": "tool result",
+};
+const eventLabel = (name) => name ? (EVENT_LABELS[name] || name.replace(/^codex\./, "")) : "event";
+
+async function getJSON(path) {
+  const r = await fetch(path, { cache: "no-store" });
+  if (!r.ok) throw new Error(path + " → " + r.status);
+  return r.json();
+}
+
+// SeriesPoint[] {bucket, series, credits} -> { buckets:[...], names:[...], data:{name:[aligned values]} }
+function pivot(points) {
+  const buckets = [...new Set(points.map(p => p.bucket))].sort();
+  const idx = Object.fromEntries(buckets.map((b, i) => [b, i]));
+  const names = [...new Set(points.map(p => p.series))].sort();
+  const data = Object.fromEntries(names.map(n => [n, new Array(buckets.length).fill(0)]));
+  for (const p of points) data[p.series][idx[p.bucket]] = p.credits;
+  return { buckets, names, data };
+}
+
+function setupSelect(id, items, value) {
+  const el = $(id);
+  el.replaceChildren(...items.map(item => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.label;
+    option.selected = item.id === value;
+    return option;
+  }));
+}
+
+function setupControls() {
+  setupSelect("rangeSelect", RANGES, state.range);
+  setupSelect("grainSelect", GRAINS, state.grain);
+  $("rangeSelect").addEventListener("change", () => selectTime("range", $("rangeSelect").value));
+  $("grainSelect").addEventListener("change", () => selectTime("grain", $("grainSelect").value));
+}
+
+function selectTime(key, value) {
+  state[key] = value;
+  const p = new URLSearchParams(location.search);
+  p.set("range", state.range);
+  p.set("grain", state.grain);
+  history.replaceState(null, "", location.pathname + "?" + p.toString());
+  refresh();
+}
+
+function rangeStartMs() {
+  const range = RANGE_BY_ID[state.range] || RANGE_BY_ID[DEFAULT_RANGE];
+  const d = new Date();
+  if (range.months) {
+    d.setMonth(d.getMonth() - range.months);
+    return d.getTime();
+  }
+  return Date.now() - range.ms;
+}
+
+function parseBucket(bucket) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(bucket || "");
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
+  return Date.parse(bucket);
+}
+
+function dataPairs(buckets, values) {
+  return buckets.map((bucket, i) => [parseBucket(bucket), values[i]]);
+}
+
+function formatAxisLabel(value) {
+  const d = new Date(value);
+  const range = RANGE_BY_ID[state.range] || RANGE_BY_ID[DEFAULT_RANGE];
+  const pad = n => String(n).padStart(2, "0");
+  if (!range.months && range.ms <= 12 * 60 * 60 * 1000) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (!range.months && range.ms <= 7 * 24 * 60 * 60 * 1000) return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:00`;
+  if (!range.months) return `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function timeAxis() {
+  return {
+    type: "time",
+    min: rangeStartMs(),
+    max: Date.now(),
+    ...AXIS,
+    axisLabel: { ...AXIS.axisLabel, formatter: formatAxisLabel },
+  };
+}
+
+function rangeQuery() {
+  return "range=" + encodeURIComponent(state.range);
+}
+
+function timeQuery() {
+  return rangeQuery() + "&grain=" + encodeURIComponent(state.grain);
+}
+
+// Shared dark-friendly chart styling (echarts dark theme is a separate file; we
+// style via option so the bundle stays single-file / offline).
+const AXIS = {
+  axisLine: { lineStyle: { color: "#2a2f3a" } },
+  axisLabel: { color: "#8b93a3", hideOverlap: true },
+  splitLine: { lineStyle: { color: "#23272f" } },
+};
+const BASE = {
+  backgroundColor: "transparent",
+  textStyle: { color: "#8b93a3" },
+  grid: { left: 50, right: 50, top: 30, bottom: 50 },
+  legend: { textStyle: { color: "#e6e9ef" }, top: 0, type: "scroll" },
+  tooltip: { backgroundColor: "#1f232c", borderColor: "#2a2f3a", textStyle: { color: "#e6e9ef" } },
+};
+
+const charts = {};
+function chart(id) {
+  if (!charts[id]) charts[id] = echarts.init($(id));
+  return charts[id];
+}
+function clearChart(id) {
+  if (charts[id]) {
+    charts[id].dispose();
+    delete charts[id];
+  }
+}
+window.addEventListener("resize", () => Object.values(charts).forEach(c => c.resize()));
+
+function renderCards(s) {
+  const label = (RANGE_BY_ID[state.range] || RANGE_BY_ID[DEFAULT_RANGE]).label;
+  $("cards").replaceChildren(...[
+    ["Credits (" + label + ")", fmt(s.totalCredits, 3), ""],
+    ["Completion events (" + label + ")", fmt(s.eventsWithCredits), `/ ${fmt(s.totalEvents)} total`],
+  ].map(([k, v, sub]) => {
+    const c = document.createElement("div"); c.className = "card";
+    c.innerHTML = `<div class="k">${k}</div><div class="v">${v}${sub ? ` <small>${sub}</small>` : ""}</div>`;
+    return c;
+  }));
+}
+
+function renderGauge(id, usage, key) {
+  const info = usageWindow(key);
+  const val = usage ? (usage.usedPercent ?? 0) : 0;
+  const resetAt = formatResetAt(usage?.resetsAt);
+  const name = info.label
+    + (usage?.planType ? " · " + usage.planType : "");
+  chart(id).setOption({
+    backgroundColor: "transparent",
+    series: [{
+      type: "gauge", min: 0, max: 100, radius: "92%", center: ["50%", "58%"],
+      progress: { show: true, width: 10 },
+      axisLine: { lineStyle: { width: 10, color: [[0.7, "#43c59e"], [0.9, "#e0a458"], [1, "#e0586b"]] } },
+      axisTick: { show: false }, splitLine: { length: 8, lineStyle: { color: "#2a2f3a" } },
+      axisLabel: { color: "#8b93a3", fontSize: 9, distance: 12 },
+      pointer: { show: false }, anchor: { show: false },
+      title: { show: true, offsetCenter: [0, "26%"], color: "#8b93a3", fontSize: 10 },
+      detail: { valueAnimation: true, fontSize: 22, color: "#e6e9ef", offsetCenter: [0, "-2%"],
+        formatter: v => usage ? v.toFixed(1) + "%" : "—" },
+      data: [{ value: val, name }],
+    }],
+  });
+  renderGaugeReset(id, resetAt);
+}
+
+function renderGaugeReset(id, resetAt) {
+  const el = $(id);
+  let reset = el.querySelector(".gauge-reset");
+  if (!resetAt) {
+    reset?.remove();
+    return;
+  }
+  if (!reset) {
+    reset = document.createElement("div");
+    reset.className = "gauge-reset";
+    el.appendChild(reset);
+  }
+  reset.textContent = "reset " + resetAt;
+}
+
+function renderUsageGauges(summary) {
+  renderGauge("gauge5h", latestUsage(summary, "primary"), "primary");
+  renderGauge("gaugeWeekly", latestUsage(summary, "secondary"), "secondary");
+}
+
+function usageLine(key, rows) {
+  const info = usageWindow(key);
+  return {
+    name: info.label + " usage %",
+    type: "line",
+    yAxisIndex: 1,
+    data: (rows || []).map(u => [parseBucket(u.sampledAt), u.usedPercent]),
+    connectNulls: true,
+    smooth: true,
+    symbol: "none",
+    lineStyle: { width: 2.5, color: info.color },
+    itemStyle: { color: info.color },
+  };
+}
+
+// Usage % (right axis, lines) overlaid on credit-by-type stacked bars (left axis).
+function renderOverlay(typePoints, usage5hHist, usageWeeklyHist) {
+  const p = pivot(typePoints);
+  const barSeries = p.names.map(n => ({
+    name: n, type: "bar", stack: "credits", data: dataPairs(p.buckets, p.data[n]), barMaxWidth: 14,
+    itemStyle: { color: TYPE_COLORS[n] || "#5b8cff" },
+  }));
+  const usageSeries = [usageLine("primary", usage5hHist), usageLine("secondary", usageWeeklyHist)];
+  chart("overlay").setOption({
+    ...BASE, animation: false,
+    tooltip: { ...BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" } },
+    legend: { ...BASE.legend, data: [...p.names, ...usageSeries.map(s => s.name)] },
+    xAxis: timeAxis(),
+    yAxis: [
+      { type: "value", name: "credits", ...AXIS },
+      { type: "value", name: "usage %", min: 0, max: 100, position: "right", ...AXIS, splitLine: { show: false } },
+    ],
+    series: [...barSeries, ...usageSeries],
+  });
+}
+
+function renderTriggerArea(points) {
+  const p = pivot(points);
+  chart("triggerArea").setOption({
+    ...BASE, animation: false,
+    tooltip: { ...BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" } },
+    legend: { ...BASE.legend, data: p.names },
+    xAxis: timeAxis(),
+    yAxis: { type: "value", name: "credits", ...AXIS },
+    series: p.names.map((n, i) => ({
+      name: n, type: "bar", stack: "credits", barMaxWidth: 14,
+      data: dataPairs(p.buckets, p.data[n]), itemStyle: { color: colorFor(n, TRIGGER_COLORS, i) },
+    })),
+  });
+}
+
+function renderBreakdown(id, rows, keyField, colorMap) {
+  clearChart(id);
+  const el = $(id);
+  el.className = el.classList.contains("compact") ? "breakdown compact" : "breakdown";
+  if (!rows.length) {
+    el.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: "no credited events yet" }));
+    return;
+  }
+  const totalCredits = rows.reduce((a, r) => a + r.credits, 0) || 1;
+  const maxCredits = rows.reduce((a, r) => Math.max(a, r.credits), 0) || 1;
+  let html = "";
+  rows.forEach((r, i) => {
+    const name = r[keyField] || "unknown";
+    const color = colorFor(name, colorMap, i);
+    const pct = 100 * r.credits / totalCredits;
+    const width = Math.max(1, 100 * r.credits / maxCredits);
+    html += `<div class="breakdown-row">`
+      + `<div class="breakdown-name"><span class="swatch" style="background:${color}"></span><span class="breakdown-title">${esc(name)}</span></div>`
+      + `<div class="breakdown-values"><b>${fmt(r.credits, 3)}</b> cr · ${eventCount(r.n)} · ${fmt(pct, 1)}%</div>`
+      + `<div class="breakdown-bar"><div class="breakdown-fill" style="width:${width}%;background:${color}"></div></div>`
+      + `</div>`;
+  });
+  el.innerHTML = html;
+}
+
+function renderDonut(id, rows, keyField, colorMap) {
+  const el = $(id);
+  if (!rows.length) {
+    clearChart(id);
+    el.className = "chart donut no-data";
+    el.textContent = "no credited events yet";
+    return;
+  }
+  // Only clear leftover text when (re)initializing — NEVER wipe a live echarts
+  // canvas. textContent="" removes the canvas echarts created as a child of el,
+  // but the instance stays cached in charts[id], so the next chart(id) reuses the
+  // now-detached instance and setOption draws into an orphaned canvas → the donut
+  // goes blank and stays blank on every refresh. Guarding on the cache keeps the
+  // canvas in place for the steady-state refresh and only clears the no-data text.
+  if (!charts[id]) el.textContent = "";
+  el.className = "chart donut";
+  const total = rows.reduce((a, r) => a + r.credits, 0);
+  chart(id).setOption({
+    ...BASE,
+    animation: false,
+    grid: undefined,
+    legend: { show: false },
+    tooltip: {
+      ...BASE.tooltip,
+      trigger: "item",
+      formatter: p => `${esc(p.name)}<br><b>${fmt(p.value, 3)}</b> cr · ${fmt(p.percent, 1)}%`,
+    },
+    series: [{
+      name: "credits",
+      type: "pie",
+      radius: ["54%", "78%"],
+      center: ["50%", "50%"],
+      avoidLabelOverlap: true,
+      minAngle: 3,
+      itemStyle: { borderColor: "#181b22", borderWidth: 2 },
+      // Labels off: the donut column is narrow (~220px) and tiny adjacent slices
+      // crowd/clip; the breakdown list beside the donut carries name + credits +
+      // events + % instead. (The earlier "labels vanish" issue was the canvas being
+      // orphaned on refresh — fixed above — not a label-specific bug.)
+      label: { show: false },
+      labelLine: { show: false },
+      data: rows.map((r, i) => {
+        const name = r[keyField] || "unknown";
+        return { name, value: r.credits, itemStyle: { color: colorFor(name, colorMap, i) } };
+      }),
+    }],
+    graphic: [{
+      type: "text",
+      left: "center",
+      top: "center",
+      style: {
+        text: fmt(total, 2) + "\ncredits",
+        align: "center",
+        fill: "#e6e9ef",
+        fontSize: 14,
+        fontWeight: 650,
+        lineHeight: 18,
+      },
+    }],
+  }, true);
+}
+
+function renderModelTrigger(rows) {
+  const c = $("modelTrigger");
+  if (!rows.length) { c.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: "no credited events yet" })); return; }
+  const total = rows.reduce((a, r) => a + r.credits, 0) || 1;
+  let html = `<table><thead><tr><th>model</th><th>trigger</th><th class="num">events</th><th class="num">credits</th><th class="num">%</th></tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr><td class="mono">${esc(r.rateModel)}</td><td><span class="pill">${esc(r.trigger)}</span></td>`
+      + `<td class="num">${fmt(r.n)}</td><td class="num"><b>${fmt(r.credits, 3)}</b></td>`
+      + `<td class="num muted">${fmt(100 * r.credits / total, 1)}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  c.innerHTML = html;
+}
+
+function renderRecent(rows) {
+  const c = $("recent");
+  if (!rows.length) { c.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: "no completions yet" })); return; }
+  let html = `<table><thead><tr><th>#</th><th>time</th><th>thread</th><th>model</th><th>trigger</th><th class="num">in</th><th class="num">cached</th><th class="num">out</th><th class="num">credits</th></tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr class="rowlink" data-id="${r.id}" title="Click to view raw log">`
+      + `<td class="muted">${r.id}</td><td class="mono">${esc(r.ts)}</td>`
+      + `<td class="mono" title="${esc(r.threadId)}">${r.threadId ? esc(shortId(r.threadId)) : '<span class="muted">—</span>'}</td>`
+      + `<td class="mono">${esc(r.rateModel || r.model || "—")}</td>`
+      + `<td>${r.trigger ? '<span class="pill">' + esc(r.trigger) + "</span>" : '<span class="muted">—</span>'}</td>`
+      + `<td class="num">${fmt(r.inputTokenCount)}</td><td class="num muted">${fmt(r.cachedInputTokenCount)}</td>`
+      + `<td class="num">${fmt(r.outputTokenCount)}</td>`
+      + `<td class="num">${r.totalCredits == null ? "—" : "<b>" + fmt(r.totalCredits, 4) + "</b>"}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  c.innerHTML = html;
+  c.querySelectorAll("tr.rowlink").forEach(tr => tr.addEventListener("click", () => showRaw(tr.dataset.id)));
+}
+
+// The sse_event errors store a JSON blob in error_message ({status, error:{message}});
+// the HTTP errors carry a flat "http NNN" + endpoint/status attributes. Normalize both
+// to {status, message} so the table reads cleanly; full detail is one click away.
+function prettyError(r) {
+  let status = r.statusCode, message = r.errorMessage || "";
+  if (message.startsWith("{")) {
+    try {
+      const j = JSON.parse(message);
+      status = status ?? j.status ?? j.error?.status;
+      message = j.error?.message || j.message || message;
+    } catch { /* leave as-is */ }
+  }
+  return { status, message };
+}
+
+function renderErrors(rows) {
+  const c = $("errors");
+  if (!rows.length) { c.replaceChildren(Object.assign(document.createElement("div"), { className: "muted", textContent: "no errors 🎉" })); return; }
+  let html = `<table><thead><tr><th>#</th><th>time</th><th>type</th><th>endpoint</th><th class="num">status</th><th>message</th><th>trigger</th></tr></thead><tbody>`;
+  for (const r of rows) {
+    const { status, message } = prettyError(r);
+    html += `<tr class="rowlink" data-id="${r.id}" title="Click to view raw log">`
+      + `<td class="muted">${r.id}</td><td class="mono">${esc(r.ts)}</td>`
+      + `<td><span class="pill ev ev-err">${esc(eventLabel(r.eventName))}</span></td>`
+      + `<td class="mono">${esc(r.endpoint || "—")}</td>`
+      + `<td class="num">${status == null ? "—" : '<span class="err">' + esc(status) + "</span>"}</td>`
+      + `<td class="err msg" title="${esc(message)}">${esc(message)}</td>`
+      + `<td>${r.trigger ? '<span class="pill">' + esc(r.trigger) + "</span>" : '<span class="muted">—</span>'}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  c.innerHTML = html;
+  c.querySelectorAll("tr.rowlink").forEach(tr => tr.addEventListener("click", () => showRaw(tr.dataset.id)));
+}
+
+async function showRaw(id) {
+  openModal();
+  $("modalTitle").textContent = "raw log — event #" + id;
+  $("modalSub").textContent = "loading…";
+  $("modalBody").textContent = "";
+  try {
+    const raw = await getJSON("/api/events/" + id + "/raw");
+    $("modalSub").textContent = [eventLabel(raw.eventName), raw.receivedAt, raw.threadId ? "thread " + raw.threadId.slice(0, 8) : ""].filter(Boolean).join("  ·  ");
+    $("modalBody").textContent = JSON.stringify(raw.record ?? raw, null, 2);
+  } catch (e) {
+    $("modalSub").textContent = "";
+    $("modalBody").textContent = "⚠ " + e.message;
+  }
+}
+function openModal() { $("modal").classList.add("open"); }
+function closeModal() { $("modal").classList.remove("open"); }
+
+async function refresh() {
+  // Fetch every panel independently. allSettled (not all) so a single failing
+  // endpoint (e.g. /usage/history while the codex usage poller is down) updates
+  // only its own panel's fallback instead of blanking the whole dashboard.
+  const settled = await Promise.allSettled([
+    getJSON("/api/summary?" + rangeQuery()),
+    getJSON("/api/credits/by-model?" + rangeQuery()),
+    getJSON("/api/credits/by-trigger?" + rangeQuery()),
+    getJSON("/api/credits/by-model-trigger?" + rangeQuery()),
+    getJSON("/api/credits/by-trigger-timeseries?" + timeQuery()),
+    getJSON("/api/credits/by-type-timeseries?" + timeQuery()),
+    getJSON("/api/usage/history?window=primary&" + timeQuery()),
+    getJSON("/api/usage/history?window=secondary&" + timeQuery()),
+    getJSON("/api/events/completions?limit=25&" + rangeQuery()),
+    getJSON("/api/events/errors?limit=25&" + rangeQuery()),
+  ]);
+  let failures = 0;
+  const val = (i, fallback) => {
+    if (settled[i].status === "fulfilled") return settled[i].value;
+    failures++;
+    return fallback;
+  };
+  const summary = val(0, null);
+  const byModel = val(1, []);
+  const byTrigger = val(2, []);
+  const byModelTrigger = val(3, []);
+  const triggerTs = val(4, []);
+  const typeTs = val(5, []);
+  const usage5hHist = val(6, []);
+  const usageWeeklyHist = val(7, []);
+  const completions = val(8, []);
+  const errors = val(9, []);
+
+  if (summary) {
+    renderCards(summary);
+    renderUsageGauges(summary);
+    $("received").textContent = "received " + formatDateTime(summary.lastReceivedAt);
+  }
+  renderOverlay(typeTs, usage5hHist, usageWeeklyHist);
+  renderTriggerArea(triggerTs);
+  renderDonut("modelDonut", byModel, "rateModel", {});
+  renderBreakdown("modelBreakdown", byModel, "rateModel", {});
+  renderDonut("triggerDonut", byTrigger, "trigger", TRIGGER_COLORS);
+  renderBreakdown("triggerBreakdown", byTrigger, "trigger", TRIGGER_COLORS);
+  renderModelTrigger(byModelTrigger);
+  renderRecent(completions);
+  renderErrors(errors);
+  $("updated").textContent = "updated " + formatDateTime(new Date());
+  $("err").textContent = failures ? ("⚠ " + failures + " request(s) failed") : "";
+}
+
+setupControls();
+$("modalClose").addEventListener("click", closeModal);
+$("modal").addEventListener("click", (e) => { if (e.target === $("modal")) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

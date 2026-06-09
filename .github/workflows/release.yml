@@ -1,0 +1,38 @@
+name: release
+
+# Build the macOS (Apple Silicon) single-binary native image on a version tag and
+# attach it to the GitHub Release. Tag with e.g. `git tag v0.1.0 && git push --tags`.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: native (macos-arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up GraalVM 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "25"
+          distribution: graalvm
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+
+      - name: Build native binary
+        run: ./mvnw -B -ntp -DskipTests -Dnative package
+
+      - name: Stage artifact
+        run: |
+          mkdir -p dist
+          cp target/codex-usage-dashboard dist/codex-usage-dashboard-macos-arm64
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/codex-usage-dashboard-macos-arm64
