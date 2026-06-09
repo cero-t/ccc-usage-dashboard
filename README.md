@@ -21,7 +21,17 @@ The prebuilt binary is **macOS only** (Apple Silicon). Download it from the
 [Releases](../../releases) page, then run it:
 
 ```sh
+unzip codex-usage-dashboard-macos-arm64.zip
 chmod +x codex-usage-dashboard
+./codex-usage-dashboard
+```
+
+The release binary is not currently signed or notarized. If macOS blocks it with
+"Apple could not verify" and you trust the downloaded file, remove the quarantine
+attribute and run it again:
+
+```sh
+xattr -d com.apple.quarantine codex-usage-dashboard
 ./codex-usage-dashboard
 ```
 
