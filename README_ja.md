@@ -2,9 +2,11 @@
 
 [English](README.md) | **日本語**
 
-`codex-usage-dashboard` は、Codex の利用状況・クレジット推定・利用主体(trigger)をローカルで確認できる、単一バイナリのダッシュボードです。
+`codex-usage-dashboard` は、Codex の利用状況・クレジット/コスト推定・利用主体(trigger)をローカルで確認できる、単一バイナリのダッシュボードです。
 
 Codex の OTLP ログを受信し、ローカルの Codex メタデータで補完し、現在の Codex 利用枠を取得して、ダッシュボードで可視化します。
+
+Claude Code の OTLP `api_request` ログも、トークン数と USD コストの行として正規化できます。ダッシュボード上では Codex / Claude Code を別タブで表示し、Codex の USD コストは 1000 credits = $40 として概算、Claude Code のコストはトークン項目と Claude API の料金表から計算します。
 
 ## 必要なもの
 
@@ -38,6 +40,12 @@ xattr -d com.apple.quarantine codex-usage-dashboard
 http://127.0.0.1:4318/
 ```
 
+画面上部のタブで Codex / Claude Code を切り替えます。期間は相対期間、現在の
+Codex 5h 利用枠、任意の from/to 範囲から選べます。
+
+多くのチャートと利用状況テーブルは、パネルごとに **Cost / Tokens** を切り替え
+られます。ある内訳は USD コストで見つつ、別の内訳はトークン数のまま確認できます。
+
 既定では localhost のみで待ち受けます:
 
 - OTLP gRPC: `127.0.0.1:4317`
@@ -62,7 +70,7 @@ exporter = { otlp-grpc = { endpoint = "http://127.0.0.1:4317" } }
 
 設定変更後は Codex を再起動してください。新しい Codex のアクティビティが、1分ほどでダッシュボードに反映され始めます。
 
-新しい OTLP イベントを記録するには、Codex を使っている間このダッシュボードのプロセスを起動しておく必要があります。停止中に送信されたイベントは後から取り込まれません。
+新しい OTLP イベントを記録するには、Codex や Claude Code を使っている間このダッシュボードのプロセスを起動しておく必要があります。停止中に送信されたイベントは後から取り込まれません。
 
 ### すでに Codex の OTLP を他のオブザバビリティ基盤へ送っている場合
 
@@ -77,6 +85,26 @@ QUARKUS_HTTP_PORT=14318
 ```
 
 そのうえで、Collector から OTLP/HTTP protobuf を `http://127.0.0.1:14318/v1/logs`(または gRPC を `:14317`)へ送信させます。
+
+## Claude Code の OTLP 設定
+
+Claude Code 対応は任意です。Codex のローカル SQLite 補完ではなく、Claude Code の
+OTLP log/events ストリームを使います。このダッシュボードを起動したうえで、Claude
+Code の OTLP logs exporter をダッシュボードへ向けて実行します:
+
+```sh
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
+claude
+```
+
+ダッシュボードは、トークン項目を含む Claude Code の `api_request` log レコードを正規化します。USD コストは受信時にトークンタイプ別に計算します。ログに `cost_usd` が含まれる場合、その値は比較用に別途保持します。metrics や traces は受信できても、ダッシュボード用のチャートには保存しません。
+
+Claude Code 側の詳細なテレメトリ設定は
+[Claude Code Monitoring docs](https://code.claude.com/docs/en/monitoring-usage)
+を参照してください。
 
 ## LAN からのアクセス
 
@@ -119,6 +147,7 @@ CODEX_BIN=codex
 - `:4317` での OTLP/gRPC
 - `:4318/v1/logs` での OTLP/HTTP protobuf
 - gzip 圧縮された OTLP/HTTP protobuf ボディ
+- トークン数と `cost_usd` を含む Claude Code OTLP log `api_request` レコード
 
 非対応:
 

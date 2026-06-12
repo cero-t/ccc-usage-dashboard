@@ -80,7 +80,15 @@ Core API:
 
 ```sh
 curl -s 'http://127.0.0.1:4318/api/summary?range=6h'
+curl -s 'http://127.0.0.1:4318/api/summary?source=claude&range=6h'
 curl -s 'http://127.0.0.1:4318/api/credits/by-type-timeseries?range=6h&grain=5m'
+curl -s 'http://127.0.0.1:4318/api/cost/by-type-timeseries?source=codex&range=6h&grain=5m'
+curl -s 'http://127.0.0.1:4318/api/tokens/by-type-timeseries?source=claude&range=6h&grain=5m'
+curl -s 'http://127.0.0.1:4318/api/cost/by-model?source=claude&range=6h'
+curl -s 'http://127.0.0.1:4318/api/tokens/by-model?source=claude&range=6h'
+curl -s 'http://127.0.0.1:4318/api/tokens/by-trigger-timeseries?source=codex&range=6h&grain=5m'
+curl -s 'http://127.0.0.1:4318/api/tokens/by-model-trigger?source=claude&range=6h'
+curl -s 'http://127.0.0.1:4318/api/events/conversations?source=codex&limit=5&range=6h'
 curl -s 'http://127.0.0.1:4318/api/events/completions?limit=5&range=6h'
 curl -s 'http://127.0.0.1:4318/api/events/errors?limit=5&range=6h'
 ```
@@ -116,6 +124,19 @@ exporters:
 ```
 
 The exporter appends `/v1/logs` automatically. gzip is supported.
+
+Claude Code can send OTLP logs directly to the same receiver:
+
+```sh
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
+claude
+```
+
+Only Claude Code log/events are used by this dashboard. Metrics and traces are
+accepted by the receiver but discarded.
 
 ## Database Replay
 

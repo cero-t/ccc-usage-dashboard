@@ -1,6 +1,7 @@
 package cero.ninja.agent.codexusage.jobs;
 
 import cero.ninja.agent.codexusage.codex.CodexDb;
+import cero.ninja.agent.codexusage.credit.ClaudeRateCard;
 import cero.ninja.agent.codexusage.credit.RateCard;
 import cero.ninja.agent.codexusage.db.JdbcClient;
 import cero.ninja.agent.codexusage.store.Cursors;
@@ -23,15 +24,16 @@ import java.util.Optional;
  * Job A. Reads raw OTLP log rows in id order from a forward-only cursor, parses
  * each, keeps the token-usage / error ones, enriches them from Codex's own DBs
  * (thread metadata from {@code state_5}, trigger signatures from {@code logs_2}),
- * and appends a derived row to {@code annotated_events}. Append-only: the raw
- * row is never mutated, so a parse bug can be fixed and replayed by rewinding
- * the cursor.
+ * and appends a derived row to {@code annotated_events}. The raw row is never
+ * mutated; replaying an already annotated row requires deleting the derived row
+ * first because {@code source_log_id} is unique.
  */
 @ApplicationScoped
 public class AnnotateJob {
 
     private static final Logger LOG = Logger.getLogger(AnnotateJob.class);
     private static final String CURSOR = "annotate_log_id";
+    private static final double CODEX_USD_PER_CREDIT = 40.0 / 1000.0;
 
     // Trigger classification signatures. A turn the user didn't drive (not in
     // state_5.threads) is tagged ambient / memory / background by scanning its
@@ -51,20 +53,31 @@ public class AnnotateJob {
 
     private static final String INSERT_ANNOTATED = """
             INSERT INTO annotated_events (
-              source_log_id, time_unix_nano, event_name, thread_id, model,
+              source_log_id, source_tool, request_id, time_unix_nano, event_name, thread_id, model,
               input_token_count, cached_input_token_count, output_token_count,
               error_message, thread_model, thread_reasoning_effort, thread_source,
               thread_title, thread_cwd, service_tier, rate_model,
-              input_credits, cached_credits, output_credits, total_credits,
+              input_credits, cached_credits, output_credits, total_credits, cost_usd,
+              input_cost_usd, cached_input_cost_usd, cache_creation_cost_usd, cache_read_cost_usd,
+              output_cost_usd, reported_cost_usd,
               trigger, originator, host, attributes_json
             ) VALUES (
-              :source_log_id, :time_unix_nano, :event_name, :thread_id, :model,
+              :source_log_id, :source_tool, :request_id, :time_unix_nano, :event_name, :thread_id, :model,
               :input_token_count, :cached_input_token_count, :output_token_count,
               :error_message, :thread_model, :thread_reasoning_effort, :thread_source,
               :thread_title, :thread_cwd, :service_tier, :rate_model,
-              :input_credits, :cached_credits, :output_credits, :total_credits,
+              :input_credits, :cached_credits, :output_credits, :total_credits, :cost_usd,
+              :input_cost_usd, :cached_input_cost_usd, :cache_creation_cost_usd, :cache_read_cost_usd,
+              :output_cost_usd, :reported_cost_usd,
               :trigger, :originator, :host, :attributes_json
             )
+            ON CONFLICT(source_log_id) DO NOTHING
+            """;
+
+    private static final String SELECT_ANNOTATED_REQUEST = """
+            SELECT 1 FROM annotated_events
+            WHERE source_tool = :source_tool AND request_id = :request_id
+            LIMIT 1
             """;
 
     @Inject
@@ -82,6 +95,9 @@ public class AnnotateJob {
     @Inject
     RateCard rateCard;
 
+    @Inject
+    ClaudeRateCard claudeRateCard;
+
     @ConfigProperty(name = "codex-usage-dashboard.annotate.batch-size", defaultValue = "500")
     int batchSize;
 
@@ -97,35 +113,16 @@ public class AnnotateJob {
             return;
         }
 
-        // state_5 is small and the primary enrichment: if we can't open it, skip
-        // the whole pass without advancing the cursor and retry next minute.
-        Connection state5;
-        try {
-            state5 = codex.openState5();
-        } catch (SQLException e) {
-            LOG.warnf("annotate pass skipped (state_5 unavailable, retrying next pass): %s", e.getMessage());
-            return;
-        }
-
-        // logs_2 is huge and constantly written; treat it as best-effort. It is
-        // only used for trigger signatures; service_tier estimation is disabled.
-        Connection logs2 = null;
-        try {
-            logs2 = codex.openLogs2();
-        } catch (SQLException e) {
-            LOG.debugf("logs_2 unavailable this pass, trigger falls back where needed: %s", e.getMessage());
-        }
-
         Map<String, Optional<CodexDb.ThreadInfo>> threadCache = new HashMap<>();
         Map<String, String> triggerCache = new HashMap<>();
         long lastId = cursor;
         long failedId = -1;
         int processed = 0;
         int annotated = 0;
-        try {
+        try (CodexConnections connections = new CodexConnections()) {
             for (RawRow row : rows) {
                 try {
-                    if (annotateOne(row, state5, logs2, threadCache, triggerCache)) {
+                    if (annotateOne(row, connections, threadCache, triggerCache)) {
                         annotated++;
                     }
                     lastId = row.id();
@@ -139,9 +136,6 @@ public class AnnotateJob {
                     break;
                 }
             }
-        } finally {
-            close(state5);
-            close(logs2);
         }
 
         if (lastId != cursor) {
@@ -159,14 +153,17 @@ public class AnnotateJob {
     /** Returns true if a derived row was appended. */
     private boolean annotateOne(
             RawRow row,
-            Connection state5,
-            Connection logs2,
+            CodexConnections connections,
             Map<String, Optional<CodexDb.ThreadInfo>> threadCache,
             Map<String, String> triggerCache
     ) throws Exception {
         JsonNode root = objectMapper.readTree(row.recordJson());
         JsonNode attrs = root.path("attributes");
         JsonNode resource = root.path("resource_attributes");
+
+        if (isClaudeRecord(root, resource)) {
+            return annotateClaude(row, root, attrs, resource);
+        }
 
         Long inputTokens = optLong(attrs, "input_token_count");
         String errorMessage = optString(attrs, "error.message");
@@ -181,13 +178,19 @@ public class AnnotateJob {
                 optString(attrs, "thread_id"),
                 optString(resource, "thread_id"));
 
-        Optional<CodexDb.ThreadInfo> thread = threadId == null
-                ? Optional.empty()
-                : threadCache.computeIfAbsent(threadId, t -> codex.lookupThread(state5, t));
+        Optional<CodexDb.ThreadInfo> thread;
+        if (threadId == null) {
+            thread = Optional.empty();
+        } else if (threadCache.containsKey(threadId)) {
+            thread = threadCache.get(threadId);
+        } else {
+            thread = codex.lookupThread(connections.state5(), threadId);
+            threadCache.put(threadId, thread);
+        }
 
         // Attribute the turn (user / ambient / memory / background).
         // Cached per thread within the pass.
-        String trigger = classifyTrigger(threadId, thread.isPresent(), logs2, triggerCache);
+        String trigger = classifyTrigger(threadId, thread.isPresent(), connections.logs2(), triggerCache);
 
         CodexDb.ThreadInfo ti = thread.orElse(null);
         String eventModel = optString(attrs, "model");
@@ -203,8 +206,10 @@ public class AnnotateJob {
                 ? null
                 : rateCard.compute(rateModel, inputTokens, cachedTokens, outputTokens);
 
-        db.sql(INSERT_ANNOTATED)
+        return db.sql(INSERT_ANNOTATED)
                 .param("source_log_id", row.id())
+                .param("source_tool", "codex")
+                .param("request_id", null)
                 .param("time_unix_nano", resolveTimeNano(root))
                 .param("event_name", optString(attrs, "event.name"))
                 .param("thread_id", threadId)
@@ -224,12 +229,116 @@ public class AnnotateJob {
                 .param("cached_credits", credits == null ? null : credits.cached())
                 .param("output_credits", credits == null ? null : credits.output())
                 .param("total_credits", credits == null ? null : credits.total())
+                .param("cost_usd", codexCostUsd(credits))
+                .param("input_cost_usd", credits == null ? null : componentCostUsd(credits.input()))
+                .param("cached_input_cost_usd", credits == null ? null : componentCostUsd(credits.cached()))
+                .param("cache_creation_cost_usd", null)
+                .param("cache_read_cost_usd", null)
+                .param("output_cost_usd", credits == null ? null : componentCostUsd(credits.output()))
+                .param("reported_cost_usd", null)
                 .param("trigger", trigger)
                 .param("originator", optString(attrs, "originator"))
                 .param("host", optString(resource, "host.name"))
                 .param("attributes_json", attrs.isMissingNode() ? null : attrs.toString())
-                .update();
-        return true;
+                .update() > 0;
+    }
+
+    private boolean annotateClaude(RawRow row, JsonNode root, JsonNode attrs, JsonNode resource) {
+        String rawEvent = firstNonBlank(optString(attrs, "event.name"), optString(root, "body"));
+        String eventName = rawEvent == null ? null : "claude." + rawEvent.replaceFirst("^claude_code\\.", "");
+        String requestId = optString(attrs, "request_id");
+        Long inputTokens = optLong(attrs, "input_tokens");
+        Long cacheCreationTokens = optLong(attrs, "cache_creation_tokens");
+        Long cacheReadTokens = optLong(attrs, "cache_read_tokens");
+        Long outputTokens = optLong(attrs, "output_tokens");
+        Double reportedCostUsd = firstNonNull(optDouble(attrs, "cost_usd"),
+                microsToUsd(optLong(attrs, "cost_usd_micros")));
+        String errorMessage = firstNonBlank(optString(attrs, "error"),
+                optString(attrs, "error.message"),
+                optString(attrs, "error_name"));
+
+        boolean hasUsage = inputTokens != null || cacheCreationTokens != null
+                || cacheReadTokens != null || outputTokens != null || reportedCostUsd != null;
+        if (!hasUsage && (errorMessage == null || errorMessage.isBlank())) {
+            return false;
+        }
+        if (requestId != null && alreadyAnnotated("claude", requestId)) {
+            return false;
+        }
+
+        Long cachedTokens = sumNullable(cacheCreationTokens, cacheReadTokens);
+        Long totalInputTokens = sumNullable(inputTokens, cacheCreationTokens, cacheReadTokens);
+        String model = optString(attrs, "model");
+        ClaudeRateCard.Costs costs = hasBillableClaudeTokens(inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens)
+                ? claudeRateCard.compute(model, inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens)
+                : null;
+        String querySource = optString(attrs, "query_source");
+        String agentName = optString(attrs, "agent.name");
+        String serviceName = optString(resource, "service.name");
+
+        return db.sql(INSERT_ANNOTATED)
+                .param("source_log_id", row.id())
+                .param("source_tool", "claude")
+                .param("request_id", requestId)
+                .param("time_unix_nano", resolveTimeNano(root))
+                .param("event_name", eventName)
+                .param("thread_id", optString(attrs, "session.id"))
+                .param("model", model)
+                .param("input_token_count", totalInputTokens)
+                .param("cached_input_token_count", cachedTokens)
+                .param("output_token_count", outputTokens)
+                .param("error_message", errorMessage)
+                .param("thread_model", null)
+                .param("thread_reasoning_effort", optString(attrs, "effort"))
+                .param("thread_source", firstNonBlank(optString(attrs, "app.entrypoint"), serviceName))
+                .param("thread_title", null)
+                .param("thread_cwd", null)
+                .param("service_tier", firstNonBlank(optString(attrs, "speed"), optString(attrs, "service_tier")))
+                .param("rate_model", model)
+                .param("input_credits", null)
+                .param("cached_credits", null)
+                .param("output_credits", null)
+                .param("total_credits", null)
+                .param("cost_usd", costs == null ? reportedCostUsd : costs.total())
+                .param("input_cost_usd", costs == null ? null : costs.input())
+                .param("cached_input_cost_usd", null)
+                .param("cache_creation_cost_usd", costs == null ? null : costs.cacheCreation())
+                .param("cache_read_cost_usd", costs == null ? null : costs.cacheRead())
+                .param("output_cost_usd", costs == null ? null : costs.output())
+                .param("reported_cost_usd", reportedCostUsd)
+                .param("trigger", classifyClaudeTrigger(querySource, agentName))
+                .param("originator", firstNonBlank(agentName, querySource))
+                .param("host", optString(resource, "host.name"))
+                .param("attributes_json", attrs.isMissingNode() ? null : attrs.toString())
+                .update() > 0;
+    }
+
+    private boolean alreadyAnnotated(String sourceTool, String requestId) {
+        return db.sql(SELECT_ANNOTATED_REQUEST)
+                .param("source_tool", sourceTool)
+                .param("request_id", requestId)
+                .query((rs, row) -> 1)
+                .optional()
+                .isPresent();
+    }
+
+    private static boolean isClaudeRecord(JsonNode root, JsonNode resource) {
+        String serviceName = optString(resource, "service.name");
+        if (serviceName != null && serviceName.startsWith("claude-code")) {
+            return true;
+        }
+        String body = optString(root, "body");
+        return body != null && (body.startsWith("claude_code.") || body.equals("api_request") || body.equals("api_error"));
+    }
+
+    private static String classifyClaudeTrigger(String querySource, String agentName) {
+        if (agentName != null || (querySource != null && querySource.startsWith("agent:"))) {
+            return "background";
+        }
+        if ("generate_session_title".equals(querySource)) {
+            return "background";
+        }
+        return "user";
     }
 
     /**
@@ -286,6 +395,24 @@ public class AnnotateJob {
         return null;
     }
 
+    private static Double optDouble(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        if (v == null || v.isNull()) {
+            return null;
+        }
+        if (v.isNumber()) {
+            return v.asDouble();
+        }
+        if (v.isTextual() && !v.asText().isBlank()) {
+            try {
+                return Double.parseDouble(v.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     private static String optString(JsonNode node, String field) {
         JsonNode v = node.get(field);
         if (v == null || v.isNull()) {
@@ -304,6 +431,52 @@ public class AnnotateJob {
         return null;
     }
 
+    @SafeVarargs
+    private static <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static Long sumNullable(Long... values) {
+        long total = 0;
+        boolean any = false;
+        for (Long value : values) {
+            if (value != null) {
+                total += value;
+                any = true;
+            }
+        }
+        return any ? total : null;
+    }
+
+    private static Double microsToUsd(Long micros) {
+        return micros == null ? null : micros / 1_000_000.0;
+    }
+
+    private static Double codexCostUsd(RateCard.Credits credits) {
+        if (credits == null) {
+            return null;
+        }
+        return Math.round(credits.total() * CODEX_USD_PER_CREDIT * 1_000_000.0) / 1_000_000.0;
+    }
+
+    private static Double componentCostUsd(double credits) {
+        return Math.round(credits * CODEX_USD_PER_CREDIT * 1_000_000.0) / 1_000_000.0;
+    }
+
+    private static boolean hasBillableClaudeTokens(Long... values) {
+        for (Long value : values) {
+            if (value != null && value > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static void close(Connection conn) {
         if (conn != null) {
             try {
@@ -315,4 +488,36 @@ public class AnnotateJob {
     }
 
     public record RawRow(long id, String recordJson) {}
+
+    private final class CodexConnections implements AutoCloseable {
+        private Connection state5;
+        private Connection logs2;
+        private boolean logs2Attempted;
+
+        Connection state5() throws SQLException {
+            if (state5 == null) {
+                state5 = codex.openState5();
+            }
+            return state5;
+        }
+
+        Connection logs2() {
+            if (logs2Attempted) {
+                return logs2;
+            }
+            logs2Attempted = true;
+            try {
+                logs2 = codex.openLogs2();
+            } catch (SQLException e) {
+                LOG.debugf("logs_2 unavailable this pass, trigger falls back where needed: %s", e.getMessage());
+            }
+            return logs2;
+        }
+
+        @Override
+        public void close() {
+            AnnotateJob.close(state5);
+            AnnotateJob.close(logs2);
+        }
+    }
 }

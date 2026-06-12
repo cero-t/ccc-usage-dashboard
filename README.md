@@ -3,10 +3,15 @@
 **English** | [日本語](README_ja.md)
 
 `codex-usage-dashboard` is a local, single-binary dashboard for Codex usage,
-credit estimates, and attribution.
+credit and cost estimates, and attribution.
 
 It receives Codex OTLP logs, enriches them with local Codex metadata, polls the
 current Codex usage window, and visualizes them in a dashboard.
+
+It can also normalize Claude Code OTLP `api_request` logs into token and USD
+cost rows. Codex and Claude Code are shown on separate dashboard tabs; Codex USD
+cost is estimated from credits at 1000 credits = $40, while Claude Code cost is
+calculated from its token fields using the Claude API pricing table.
 
 ## Requirements
 
@@ -44,6 +49,14 @@ Open:
 http://127.0.0.1:4318/
 ```
 
+Use the top-bar tabs to switch between Codex and Claude Code. The range selector
+supports relative windows, the current Codex 5h usage window, and a custom
+from/to range.
+
+Most charts and usage tables have a local **Cost / Tokens** toggle. The toggle is
+per panel, so you can compare one breakdown by USD cost while keeping another in
+raw token counts.
+
 By default the app listens only on localhost:
 
 - OTLP gRPC: `127.0.0.1:4317`
@@ -70,8 +83,8 @@ exporter = { otlp-grpc = { endpoint = "http://127.0.0.1:4317" } }
 Restart Codex after changing the config. New Codex activity should start filling
 the dashboard within about a minute.
 
-Keep this dashboard process running while you use Codex to capture new OTLP
-events. Events emitted while it is stopped are not backfilled.
+Keep this dashboard process running while you use Codex or Claude Code to capture
+new OTLP events. Events emitted while it is stopped are not backfilled.
 
 ### Already exporting Codex OTLP elsewhere?
 
@@ -92,6 +105,29 @@ QUARKUS_HTTP_PORT=14318
 
 Then have the collector send OTLP/HTTP protobuf to `http://127.0.0.1:14318/v1/logs`
 (or gRPC to `:14317`).
+
+## Configure Claude Code OTLP
+
+Claude Code support is optional. It uses Claude Code's OTLP log/events stream,
+not Codex's local SQLite enrichment path. Start this dashboard, then run Claude
+Code with its OTLP logs exporter pointed at the dashboard:
+
+```sh
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
+claude
+```
+
+The dashboard normalizes Claude Code `api_request` log records that include
+token fields. It calculates USD cost by token type at ingest time; if the log
+also includes `cost_usd`, that reported value is preserved separately for
+comparison. Metrics and traces may be accepted by the receiver, but they are not
+stored for dashboard charts.
+
+For the full Claude Code telemetry configuration surface, see the
+[Claude Code Monitoring docs](https://code.claude.com/docs/en/monitoring-usage).
 
 ## LAN Access
 
@@ -138,6 +174,7 @@ Supported:
 - OTLP/gRPC on `:4317`
 - OTLP/HTTP protobuf on `:4318/v1/logs`
 - gzip-compressed OTLP/HTTP protobuf bodies
+- Claude Code OTLP log `api_request` records with token and `cost_usd` fields
 
 Not supported:
 

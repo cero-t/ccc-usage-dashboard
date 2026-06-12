@@ -3,12 +3,16 @@
 `codex-usage-dashboard` is a local append-oriented pipeline:
 
 ```text
-Codex OTLP logs
+Codex OTLP logs / Claude Code OTLP logs
   -> OTLP receiver
   -> otel_log_records
   -> annotate job
   -> annotated_events
   -> JSON API + static dashboard
+
+Codex local SQLite
+  -> annotate job (Codex rows only)
+  -> annotated_events
 
 codex app-server rateLimits/read
   -> usage job
@@ -33,6 +37,9 @@ Supported inputs:
 Traces and metrics are accepted and discarded. Logs are converted mechanically
 from protobuf to JSON and appended to `otel_log_records(record_json)`.
 
+Claude Code cost and token charts use its log/event `api_request` records. The
+dashboard does not persist Claude Code metrics or traces.
+
 OTLP/HTTP JSON is intentionally not implemented. JSON requests return `415` so
 an exporter configured for JSON cannot appear healthy while dropping data.
 
@@ -41,17 +48,33 @@ an exporter configured for JSON cannot appear healthy while dropping data.
 Implemented by `jobs/AnnotateJob`, scheduled every 60 seconds by default.
 
 The job reads `otel_log_records` after cursor `annotate_log_id`, parses raw JSON,
-and keeps rows that contain either:
+and keeps rows that match either tool's usage/error shape.
+
+Codex rows are kept when they contain either:
 
 - `attributes.input_token_count`
 - `attributes.error.message`
 
-It enriches kept rows from Codex local SQLite:
+Codex rows are enriched from Codex local SQLite:
 
 - `~/.codex/state_5.sqlite`, table `threads`
 - `~/.codex/logs_2.sqlite`, table `logs`
 
+Claude Code rows are kept when `resource_attributes.service.name` starts with
+`claude-code`, or the log body/event name identifies a Claude Code API event.
+The relevant usage shape is:
+
+- `api_request` with token fields and/or `cost_usd`
+- `api_error` or another Claude Code API event with an error field
+
 The derived row is appended to `annotated_events`; raw rows are never mutated.
+Each row has `source_tool = 'codex'` or `source_tool = 'claude'`. Claude Code
+`request_id` is used for source-level dedupe when present. Codex rows compute
+`total_credits` and an estimated `cost_usd`; Claude rows compute `cost_usd`
+and per-type USD component columns from the Claude API pricing table while
+preserving the log-provided value in `reported_cost_usd`. Claude
+`cache_creation_tokens` are treated as 5-minute cache writes, and
+`total_credits` stays null.
 
 If a per-row annotate exception occurs, the pass stops before that row and leaves
 the cursor at the last successfully processed raw row. The failing row is retried
@@ -88,7 +111,8 @@ data/codex-usage-dashboard.sqlite
 Tables:
 
 - `otel_log_records`: raw OTLP log records as JSON
-- `annotated_events`: parsed token/error rows plus enrichment and credits
+- `annotated_events`: parsed token/error rows plus source, enrichment, credits,
+  and cost
 - `usage_samples`: point-in-time rate-limit snapshots
 - `cursor`: forward cursor state
 
@@ -97,6 +121,7 @@ Important indexes:
 - `idx_annotated_events_source`: raw-to-derived join
 - `idx_annotated_events_event_epoch`: dashboard time filtering
 - `idx_annotated_events_credit_epoch`: credit time filtering
+- `idx_annotated_events_source_request`: Claude Code request-id dedupe
 - `idx_usage_samples_window_sampled`: usage history by window/time
 
 ## Dashboard
@@ -112,16 +137,42 @@ It uses vendored Apache ECharts and calls JSON endpoints under `/api`.
 Dashboard time-series endpoints accept:
 
 ```text
+source=codex|claude
 range=15m|30m|1h|3h|6h|12h|1d|3d|1w|30d|6mo
+from=<epoch seconds or milliseconds>
+to=<epoch seconds or milliseconds>
 grain=1m|5m|30m|1h|12h|1d
+```
+
+Metric display mode is a client-side UI state. The page preserves per-panel
+choices in the URL with:
+
+```text
+typeTimeMode=cost|tokens
+triggerTimeMode=cost|tokens
+modelMode=cost|tokens
+triggerMode=cost|tokens
+modelTriggerMode=cost|tokens
+conversationsMode=cost|tokens
+recentMode=cost|tokens
 ```
 
 Default:
 
 ```text
+source=codex
 range=6h
 grain=5m
 ```
+
+`from` and `to` override the relative `range`. The UI's `Current 5h window` and
+`Custom` range options are client-side states: before calling the API, the page
+resolves them into explicit `from`/`to` values.
+
+Both Codex and Claude Code tabs can render most breakdown panels by USD cost or
+raw token count. Cost mode uses `/api/cost/...`; token mode uses `/api/tokens/...`.
+The Codex type chart keeps its usage % overlays in both modes. Conversation
+totals, recent completions, and recent errors are source-filtered shared tables.
 
 ## Security Posture
 

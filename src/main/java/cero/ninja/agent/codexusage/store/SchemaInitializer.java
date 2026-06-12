@@ -28,6 +28,8 @@ import java.nio.file.Path;
 @ApplicationScoped
 public class SchemaInitializer {
 
+    private static final double CODEX_USD_PER_CREDIT = 40.0 / 1000.0;
+
     private static final String RAW_TABLE = """
             CREATE TABLE IF NOT EXISTS otel_log_records (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +42,8 @@ public class SchemaInitializer {
             CREATE TABLE IF NOT EXISTS annotated_events (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               source_log_id INTEGER NOT NULL,
+              source_tool TEXT NOT NULL DEFAULT 'codex',
+              request_id TEXT,
               annotated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               time_unix_nano INTEGER,
               event_name TEXT,
@@ -60,12 +64,19 @@ public class SchemaInitializer {
               cached_credits REAL,
               output_credits REAL,
               total_credits REAL,
+              cost_usd REAL,
+              input_cost_usd REAL,
+              cached_input_cost_usd REAL,
+              cache_creation_cost_usd REAL,
+              cache_read_cost_usd REAL,
+              output_cost_usd REAL,
+              reported_cost_usd REAL,
               attributes_json TEXT
             )
             """;
 
-    private static final String ANNOTATED_INDEX = """
-            CREATE INDEX IF NOT EXISTS idx_annotated_events_source
+    private static final String ANNOTATED_SOURCE_UNIQUE_INDEX = """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_annotated_events_source_unique
             ON annotated_events(source_log_id)
             """;
 
@@ -82,6 +93,12 @@ public class SchemaInitializer {
               CAST(COALESCE(NULLIF(time_unix_nano, 0) / 1000000000, strftime('%s', annotated_at)) AS INTEGER)
             )
             WHERE total_credits IS NOT NULL
+            """;
+
+    private static final String ANNOTATED_REQUEST_INDEX = """
+            CREATE INDEX IF NOT EXISTS idx_annotated_events_source_request
+            ON annotated_events(source_tool, request_id)
+            WHERE request_id IS NOT NULL
             """;
 
     private static final String USAGE_TABLE = """
@@ -108,6 +125,55 @@ public class SchemaInitializer {
             )
             """;
 
+    private static final String BACKFILL_CODEX_COST_USD = """
+            UPDATE annotated_events
+            SET cost_usd = round(total_credits * :usd_per_credit, 6)
+            WHERE COALESCE(source_tool, 'codex') = 'codex'
+              AND total_credits IS NOT NULL
+              AND cost_usd IS NULL
+            """;
+
+    private static final String BACKFILL_CODEX_COMPONENT_COST_USD = """
+            UPDATE annotated_events
+            SET input_cost_usd = CASE
+                    WHEN input_credits IS NULL THEN input_cost_usd
+                    ELSE COALESCE(input_cost_usd, round(input_credits * :usd_per_credit, 6))
+                END,
+                cached_input_cost_usd = CASE
+                    WHEN cached_credits IS NULL THEN cached_input_cost_usd
+                    ELSE COALESCE(cached_input_cost_usd, round(cached_credits * :usd_per_credit, 6))
+                END,
+                output_cost_usd = CASE
+                    WHEN output_credits IS NULL THEN output_cost_usd
+                    ELSE COALESCE(output_cost_usd, round(output_credits * :usd_per_credit, 6))
+                END
+            WHERE COALESCE(source_tool, 'codex') = 'codex'
+              AND (input_credits IS NOT NULL OR cached_credits IS NOT NULL OR output_credits IS NOT NULL)
+            """;
+
+    private static final String BACKFILL_CLAUDE_INPUT_TOTALS = """
+            UPDATE annotated_events
+            SET input_token_count = COALESCE(CAST(json_extract(attributes_json, '$.input_tokens') AS INTEGER), 0)
+                                    + COALESCE(CAST(json_extract(attributes_json, '$.cache_creation_tokens') AS INTEGER), 0)
+                                    + COALESCE(CAST(json_extract(attributes_json, '$.cache_read_tokens') AS INTEGER), 0),
+                cached_input_token_count = COALESCE(CAST(json_extract(attributes_json, '$.cache_creation_tokens') AS INTEGER), 0)
+                                           + COALESCE(CAST(json_extract(attributes_json, '$.cache_read_tokens') AS INTEGER), 0)
+            WHERE COALESCE(source_tool, 'codex') = 'claude'
+              AND attributes_json IS NOT NULL
+              AND (json_extract(attributes_json, '$.input_tokens') IS NOT NULL
+                   OR json_extract(attributes_json, '$.cache_creation_tokens') IS NOT NULL
+                   OR json_extract(attributes_json, '$.cache_read_tokens') IS NOT NULL)
+            """;
+
+    private static final String DELETE_DUPLICATE_ANNOTATED_EVENTS = """
+            DELETE FROM annotated_events
+            WHERE id NOT IN (
+              SELECT MIN(id)
+              FROM annotated_events
+              GROUP BY source_log_id
+            )
+            """;
+
     @Inject
     JdbcClient db;
 
@@ -118,22 +184,42 @@ public class SchemaInitializer {
         ensureParentDirectoryExists();
         db.sql(RAW_TABLE).update();
         db.sql(ANNOTATED_TABLE).update();
-        db.sql(ANNOTATED_INDEX).update();
-        db.sql(ANNOTATED_EVENT_TIME_INDEX).update();
-        db.sql(ANNOTATED_CREDIT_TIME_INDEX).update();
         db.sql(USAGE_TABLE).update();
-        db.sql(USAGE_WINDOW_TIME_INDEX).update();
         db.sql(CURSOR_TABLE).update();
+        // Cross-tool fields added when Claude Code log support shipped.
+        ensureColumn("annotated_events", "source_tool", "TEXT NOT NULL DEFAULT 'codex'");
+        ensureColumn("annotated_events", "request_id", "TEXT");
+        ensureColumn("annotated_events", "cost_usd", "REAL");
         // Credit columns added after annotated_events shipped — migrate older DBs.
         ensureColumn("annotated_events", "rate_model", "TEXT");
         ensureColumn("annotated_events", "input_credits", "REAL");
         ensureColumn("annotated_events", "cached_credits", "REAL");
         ensureColumn("annotated_events", "output_credits", "REAL");
         ensureColumn("annotated_events", "total_credits", "REAL");
+        // USD component columns back cost-by-type views across tools.
+        ensureColumn("annotated_events", "input_cost_usd", "REAL");
+        ensureColumn("annotated_events", "cached_input_cost_usd", "REAL");
+        ensureColumn("annotated_events", "cache_creation_cost_usd", "REAL");
+        ensureColumn("annotated_events", "cache_read_cost_usd", "REAL");
+        ensureColumn("annotated_events", "output_cost_usd", "REAL");
+        ensureColumn("annotated_events", "reported_cost_usd", "REAL");
         // Attribution columns added later (trigger/originator/host).
         ensureColumn("annotated_events", "trigger", "TEXT");
         ensureColumn("annotated_events", "originator", "TEXT");
         ensureColumn("annotated_events", "host", "TEXT");
+        db.sql(BACKFILL_CODEX_COST_USD)
+                .param("usd_per_credit", CODEX_USD_PER_CREDIT)
+                .update();
+        db.sql(BACKFILL_CODEX_COMPONENT_COST_USD)
+                .param("usd_per_credit", CODEX_USD_PER_CREDIT)
+                .update();
+        db.sql(BACKFILL_CLAUDE_INPUT_TOTALS).update();
+        db.sql(DELETE_DUPLICATE_ANNOTATED_EVENTS).update();
+        db.sql(ANNOTATED_SOURCE_UNIQUE_INDEX).update();
+        db.sql(ANNOTATED_EVENT_TIME_INDEX).update();
+        db.sql(ANNOTATED_CREDIT_TIME_INDEX).update();
+        db.sql(ANNOTATED_REQUEST_INDEX).update();
+        db.sql(USAGE_WINDOW_TIME_INDEX).update();
     }
 
     private void ensureColumn(String table, String column, String type) {

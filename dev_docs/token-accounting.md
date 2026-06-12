@@ -26,6 +26,55 @@ records with token counts or `error.message` in `annotated_events`.
 See [`codex-data-model.md`](codex-data-model.md) for the observed OTLP and
 Codex SQLite fields, including which IDs are not present on completion rows.
 
+Claude Code emits token-bearing OTLP log records as `api_request` events. The
+dashboard stores them in the same `annotated_events` table with
+`source_tool = 'claude'`:
+
+```text
+body = api_request
+resource_attributes.service.name = claude-code / claude-code-desktop
+attributes.request_id
+attributes.session.id
+attributes.model
+attributes.input_tokens
+attributes.cache_creation_tokens
+attributes.cache_read_tokens
+attributes.output_tokens
+attributes.cost_usd
+attributes.query_source
+attributes.agent.name
+```
+
+These fields follow the
+[Claude Code Monitoring API request event](https://code.claude.com/docs/en/monitoring-usage).
+
+Claude `request_id` is used for dedupe. `session.id` is stored as `thread_id`.
+`cache_creation_tokens + cache_read_tokens` is stored in
+`cached_input_token_count` for display and conversation totals. Claude
+`reported_cost_usd` preserves the log-provided value when present. The dashboard
+calculates and stores Claude `cost_usd` plus per-type USD columns at annotation
+time. `total_credits` remains null for Claude rows because Codex credits are a
+separate unit.
+
+Claude Code cache writes are treated as 5-minute cache writes. Cost components
+are:
+
+```text
+input_cost_usd          = input_tokens          * base_input_rate       / 1_000_000
+cache_creation_cost_usd = cache_creation_tokens * 5m_cache_write_rate   / 1_000_000
+cache_read_cost_usd     = cache_read_tokens     * cache_hit_rate        / 1_000_000
+output_cost_usd         = output_tokens         * output_rate           / 1_000_000
+cost_usd                = sum(component costs)
+```
+
+The live table is `credit/ClaudeRateCard.java`.
+
+Source of truth:
+
+```text
+https://platform.claude.com/docs/ja/about-claude/pricing
+```
+
 ## Credit Formula
 
 `input_token_count` is the full input count. Cached input is a subset of it.
@@ -37,10 +86,29 @@ input_credits  = uncached_input     * input_rate  / 1_000_000
 cached_credits = cached_token_count * cached_rate / 1_000_000
 output_credits = output_token_count * output_rate / 1_000_000
 total_credits  = input_credits + cached_credits + output_credits
+cost_usd       = total_credits * 0.04
 ```
 
 `reasoning_token_count` is recorded by Codex but is not billed separately here;
 it is a subset of output tokens.
+
+Codex USD cost is an estimate derived from credits at 1000 credits = $40.
+Existing Codex rows are backfilled into `cost_usd` during schema initialization
+when `total_credits` is present and `cost_usd` is still null.
+
+## Dashboard Token Mode
+
+Dashboard panels that expose a `Cost / Tokens` toggle use token mode as the sum
+of the additive token categories shown in the by-type chart:
+
+```text
+Codex tokens  = uncached_input + cached_input + output
+Claude tokens = input_tokens + cache_creation_tokens + cache_read_tokens + output_tokens
+```
+
+Token-mode model, trigger, model x trigger, and trigger-over-time endpoints all
+use the same source-specific token expression. Cost mode uses the stored
+`cost_usd` and per-type USD component columns instead.
 
 ## Rate Card
 

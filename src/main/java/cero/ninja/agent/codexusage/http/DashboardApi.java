@@ -48,8 +48,13 @@ public class DashboardApi {
 
     public record Summary(
             double totalCredits,
+            double totalCostUsd,
+            long totalInputTokens,
+            long totalCachedInputTokens,
+            long totalOutputTokens,
             long totalEvents,
             long eventsWithCredits,
+            long eventsWithCost,
             long rawRecords,
             long annotateCursor,
             long backlog,
@@ -84,9 +89,16 @@ public class DashboardApi {
             String model,
             String rateModel,
             Integer inputTokenCount,
+            Integer uncachedInputTokenCount,
             Integer cachedInputTokenCount,
             Integer outputTokenCount,
+            Integer rawInputTokenCount,
+            Integer cacheReadTokenCount,
+            Integer cacheCreationTokenCount,
             Double totalCredits,
+            Double costUsd,
+            String sourceTool,
+            String requestId,
             String trigger,
             String threadSource,
             String serviceTier,
@@ -131,6 +143,67 @@ public class DashboardApi {
             String series,
             double credits) {}
 
+    public record CostByModel(
+            String rateModel,
+            long n,
+            Long inTok,
+            Long outTok,
+            double costUsd) {}
+
+    public record CostByTrigger(
+            String trigger,
+            long n,
+            double costUsd) {}
+
+    public record CostByModelTrigger(
+            String rateModel,
+            String trigger,
+            long n,
+            double costUsd) {}
+
+    public record TokenByModel(
+            String rateModel,
+            long n,
+            long tokens) {}
+
+    public record TokenByTrigger(
+            String trigger,
+            long n,
+            long tokens) {}
+
+    public record TokenByModelTrigger(
+            String rateModel,
+            String trigger,
+            long n,
+            long tokens) {}
+
+    public record CostSeriesPoint(
+            String bucket,
+            String series,
+            double costUsd) {}
+
+    public record TokenSeriesPoint(
+            String bucket,
+            String series,
+            long tokens) {}
+
+    public record ConversationUsage(
+            String sourceTool,
+            String lastTs,
+            String threadId,
+            String rateModel,
+            String trigger,
+            long n,
+            Long inputTokenCount,
+            Long uncachedInputTokenCount,
+            Long cachedInputTokenCount,
+            Long outputTokenCount,
+            Long rawInputTokenCount,
+            Long cacheReadTokenCount,
+            Long cacheCreationTokenCount,
+            Double totalCredits,
+            Double costUsd) {}
+
     private record TimeRange(String id, long seconds, int months) {
         long sinceEpoch(Instant now) {
             if (months > 0) {
@@ -143,6 +216,8 @@ public class DashboardApi {
     }
 
     private record TimeGrain(String id, int seconds) {}
+
+    private record TimeBounds(long sinceEpoch, long untilEpoch) {}
 
     private static final TimeRange DEFAULT_RANGE = new TimeRange("6h", 6 * 60 * 60L, 0);
     private static final TimeGrain DEFAULT_GRAIN = new TimeGrain("5m", 5 * 60);
@@ -173,7 +248,8 @@ public class DashboardApi {
     private static final String EVENT_EPOCH =
             "CAST(COALESCE(NULLIF(time_unix_nano, 0) / 1000000000, strftime('%s', annotated_at)) AS INTEGER)";
 
-    private static final String TIME_FILTER = EVENT_EPOCH + " >= :sinceEpoch";
+    private static final String TIME_FILTER = EVENT_EPOCH + " >= :sinceEpoch AND " + EVENT_EPOCH + " < :untilEpoch";
+    private static final String SOURCE_FILTER = "COALESCE(source_tool, 'codex') = :sourceTool";
 
     // Selectable bucket in local wall time, rounded down by :grainSeconds. The
     // second strftime intentionally omits 'localtime' because the intermediate
@@ -188,21 +264,67 @@ public class DashboardApi {
 
     @GET
     @Path("/summary")
-    public Summary summary(@QueryParam("range") @DefaultValue("6h") String range) {
-        long sinceEpoch = range(range).sinceEpoch(Instant.now());
+    public Summary summary(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         double totalCredits = db.sql(
                         "SELECT round(coalesce(sum(total_credits), 0), 4) FROM annotated_events "
-                        + "WHERE total_credits IS NOT NULL AND " + TIME_FILTER)
-                .param("sinceEpoch", sinceEpoch)
+                        + "WHERE total_credits IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query((rs, row) -> rs.getDouble(1)).single();
+        double totalCostUsd = db.sql(
+                        "SELECT round(coalesce(sum(cost_usd), 0), 6) FROM annotated_events "
+                        + "WHERE cost_usd IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
                 .query((rs, row) -> rs.getDouble(1)).single();
         long totalEvents = db.sql(
-                        "SELECT count(*) FROM annotated_events WHERE " + TIME_FILTER)
-                .param("sinceEpoch", sinceEpoch)
+                        "SELECT count(*) FROM annotated_events WHERE " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
                 .query((rs, row) -> rs.getLong(1)).single();
         long eventsWithCredits = db.sql(
                         "SELECT count(*) FROM annotated_events "
-                        + "WHERE total_credits IS NOT NULL AND " + TIME_FILTER)
-                .param("sinceEpoch", sinceEpoch)
+                        + "WHERE total_credits IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query((rs, row) -> rs.getLong(1)).single();
+        long eventsWithCost = db.sql(
+                        "SELECT count(*) FROM annotated_events "
+                        + "WHERE cost_usd IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query((rs, row) -> rs.getLong(1)).single();
+        long totalInputTokens = db.sql(
+                        "SELECT coalesce(sum(input_token_count), 0) FROM annotated_events "
+                        + "WHERE input_token_count IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query((rs, row) -> rs.getLong(1)).single();
+        long totalCachedInputTokens = db.sql(
+                        "SELECT coalesce(sum(cached_input_token_count), 0) FROM annotated_events "
+                        + "WHERE cached_input_token_count IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query((rs, row) -> rs.getLong(1)).single();
+        long totalOutputTokens = db.sql(
+                        "SELECT coalesce(sum(output_token_count), 0) FROM annotated_events "
+                        + "WHERE output_token_count IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
                 .query((rs, row) -> rs.getLong(1)).single();
         long rawRecords = db.sql("SELECT count(*) FROM otel_log_records")
                 .query((rs, row) -> rs.getLong(1)).single();
@@ -217,13 +339,19 @@ public class DashboardApi {
                 .param("cursor", annotateCursor)
                 .query((rs, row) -> rs.getLong(1)).single();
 
-        return new Summary(totalCredits, totalEvents, eventsWithCredits, rawRecords,
+        return new Summary(totalCredits, totalCostUsd, totalInputTokens, totalCachedInputTokens, totalOutputTokens,
+                totalEvents, eventsWithCredits, eventsWithCost, rawRecords,
                 annotateCursor, backlog, lastReceivedAt, usageLatest());
     }
 
     @GET
     @Path("/credits/by-model")
-    public List<ModelCredits> creditsByModel(@QueryParam("range") @DefaultValue("6h") String range) {
+    public List<ModelCredits> creditsByModel(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT rate_model,
                        count(*)                       AS n,
@@ -233,10 +361,13 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE total_credits IS NOT NULL
                   AND %s
+                  AND %s
                 GROUP BY rate_model
                 ORDER BY credits DESC
-                """.formatted(TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .query(ModelCredits.class).list();
     }
 
@@ -244,7 +375,11 @@ public class DashboardApi {
     @Path("/credits/timeseries")
     public List<CreditPoint> creditsTimeseries(
             @QueryParam("range") @DefaultValue("6h") String range,
-            @QueryParam("grain") @DefaultValue("5m") String grain) {
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT %s                                    AS bucket,
                        round(sum(total_credits), 4)           AS credits,
@@ -252,10 +387,13 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE total_credits IS NOT NULL
                   AND %s
+                  AND %s
                 GROUP BY bucket
                 ORDER BY bucket
-                """.formatted(BUCKET, TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .param("grainSeconds", grain(grain).seconds())
                 .query(CreditPoint.class).list();
     }
@@ -265,7 +403,11 @@ public class DashboardApi {
     @Path("/events/completions")
     public List<RecentEvent> recentCompletions(
             @QueryParam("limit") @DefaultValue("25") int limit,
-            @QueryParam("range") @DefaultValue("6h") String range) {
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT id,
                        COALESCE(datetime(NULLIF(time_unix_nano, 0) / 1000000000, 'unixepoch', 'localtime'),
@@ -275,9 +417,17 @@ public class DashboardApi {
                        model,
                        rate_model,
                        input_token_count,
+                       max(coalesce(input_token_count, 0) - coalesce(cached_input_token_count, 0), 0)
+                         AS uncached_input_token_count,
                        cached_input_token_count,
                        output_token_count,
+                       CAST(json_extract(attributes_json, '$.input_tokens') AS INTEGER) AS raw_input_token_count,
+                       CAST(json_extract(attributes_json, '$.cache_read_tokens') AS INTEGER) AS cache_read_token_count,
+                       CAST(json_extract(attributes_json, '$.cache_creation_tokens') AS INTEGER) AS cache_creation_token_count,
                        total_credits,
+                       cost_usd,
+                       COALESCE(source_tool, 'codex') AS source_tool,
+                       request_id,
                        trigger,
                        thread_source,
                        service_tier,
@@ -285,12 +435,57 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE error_message IS NULL
                   AND %s
+                  AND %s
                 ORDER BY id DESC
                 LIMIT :limit
-                """.formatted(TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .param("limit", clamp(limit, 1, 500))
                 .query(RecentEvent.class).list();
+    }
+
+    @GET
+    @Path("/events/conversations")
+    public List<ConversationUsage> conversationUsage(
+            @QueryParam("limit") @DefaultValue("25") int limit,
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(source_tool, 'codex') AS source_tool,
+                       COALESCE(datetime(max(%1$s), 'unixepoch', 'localtime'), datetime(max(annotated_at), 'localtime')) AS last_ts,
+                       thread_id,
+                       COALESCE(rate_model, model, 'unknown') AS rate_model,
+                       COALESCE(trigger, 'unknown') AS trigger,
+                       count(*) AS n,
+                       sum(input_token_count) AS input_token_count,
+                       sum(max(coalesce(input_token_count, 0) - coalesce(cached_input_token_count, 0), 0))
+                         AS uncached_input_token_count,
+                       sum(cached_input_token_count) AS cached_input_token_count,
+                       sum(output_token_count) AS output_token_count,
+                       sum(CAST(json_extract(attributes_json, '$.input_tokens') AS INTEGER)) AS raw_input_token_count,
+                       sum(CAST(json_extract(attributes_json, '$.cache_read_tokens') AS INTEGER)) AS cache_read_token_count,
+                       sum(CAST(json_extract(attributes_json, '$.cache_creation_tokens') AS INTEGER)) AS cache_creation_token_count,
+                       round(sum(total_credits), 4) AS total_credits,
+                       round(sum(cost_usd), 6) AS cost_usd
+                FROM annotated_events
+                WHERE (input_token_count IS NOT NULL OR output_token_count IS NOT NULL
+                       OR total_credits IS NOT NULL OR cost_usd IS NOT NULL)
+                  AND %2$s
+                  AND %3$s
+                GROUP BY source_tool, thread_id, rate_model, trigger
+                ORDER BY max(%1$s) DESC
+                LIMIT :limit
+                """.formatted(EVENT_EPOCH, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
+                .param("limit", clamp(limit, 1, 200))
+                .query(ConversationUsage.class).list();
     }
 
     /**
@@ -304,7 +499,11 @@ public class DashboardApi {
     @Path("/events/errors")
     public List<ErrorEvent> recentErrors(
             @QueryParam("limit") @DefaultValue("25") int limit,
-            @QueryParam("range") @DefaultValue("6h") String range) {
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT id,
                        COALESCE(datetime(NULLIF(time_unix_nano, 0) / 1000000000, 'unixepoch', 'localtime'),
@@ -317,10 +516,13 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE error_message IS NOT NULL
                   AND %s
+                  AND %s
                 ORDER BY id DESC
                 LIMIT :limit
-                """.formatted(TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .param("limit", clamp(limit, 1, 500))
                 .query(ErrorEvent.class).list();
     }
@@ -394,7 +596,10 @@ public class DashboardApi {
     public List<UsagePoint> usageHistory(
             @QueryParam("window") @DefaultValue("primary") String window,
             @QueryParam("range") @DefaultValue("6h") String range,
-            @QueryParam("grain") @DefaultValue("5m") String grain) {
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 WITH points AS (
                   SELECT id,
@@ -402,6 +607,7 @@ public class DashboardApi {
                   FROM usage_samples
                   WHERE window = :window
                     AND sampled_at >= datetime(:sinceEpoch, 'unixepoch')
+                    AND sampled_at < datetime(:untilEpoch, 'unixepoch')
                 ),
                 last_sample AS (
                   SELECT bucket_epoch, max(id) AS id
@@ -415,14 +621,20 @@ public class DashboardApi {
                 ORDER BY last_sample.bucket_epoch
                 """)
                 .param("window", window)
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
                 .param("grainSeconds", grain(grain).seconds())
                 .query(UsagePoint.class).list();
     }
 
     @GET
     @Path("/credits/by-trigger")
-    public List<TriggerCredits> creditsByTrigger(@QueryParam("range") @DefaultValue("6h") String range) {
+    public List<TriggerCredits> creditsByTrigger(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT COALESCE(trigger, 'unknown')  AS trigger,
                        count(*)                       AS n,
@@ -430,16 +642,24 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE total_credits IS NOT NULL
                   AND %s
+                  AND %s
                 GROUP BY trigger
                 ORDER BY credits DESC
-                """.formatted(TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .query(TriggerCredits.class).list();
     }
 
     @GET
     @Path("/credits/by-model-trigger")
-    public List<ModelTriggerCredits> creditsByModelTrigger(@QueryParam("range") @DefaultValue("6h") String range) {
+    public List<ModelTriggerCredits> creditsByModelTrigger(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT rate_model,
                        COALESCE(trigger, 'unknown')  AS trigger,
@@ -448,10 +668,13 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE total_credits IS NOT NULL
                   AND %s
+                  AND %s
                 GROUP BY rate_model, trigger
                 ORDER BY credits DESC
-                """.formatted(TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .query(ModelTriggerCredits.class).list();
     }
 
@@ -459,7 +682,11 @@ public class DashboardApi {
     @Path("/credits/by-trigger-timeseries")
     public List<SeriesPoint> creditsByTriggerOverTime(
             @QueryParam("range") @DefaultValue("6h") String range,
-            @QueryParam("grain") @DefaultValue("5m") String grain) {
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         return db.sql("""
                 SELECT %s                            AS bucket,
                        COALESCE(trigger, 'unknown')  AS series,
@@ -467,10 +694,13 @@ public class DashboardApi {
                 FROM annotated_events
                 WHERE total_credits IS NOT NULL
                   AND %s
+                  AND %s
                 GROUP BY bucket, series
                 ORDER BY bucket
-                """.formatted(BUCKET, TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .param("grainSeconds", grain(grain).seconds())
                 .query(SeriesPoint.class).list();
     }
@@ -483,29 +713,423 @@ public class DashboardApi {
     @Path("/credits/by-type-timeseries")
     public List<SeriesPoint> creditsByTypeOverTime(
             @QueryParam("range") @DefaultValue("6h") String range,
-            @QueryParam("grain") @DefaultValue("5m") String grain) {
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
         String b = BUCKET;
         return db.sql("""
                 SELECT bucket, series, round(sum(credits), 4) AS credits FROM (
                   SELECT %1$s AS bucket, 'uncached_input' AS series, input_credits  AS credits
-                    FROM annotated_events WHERE input_credits  IS NOT NULL AND %2$s
+                    FROM annotated_events WHERE input_credits  IS NOT NULL AND %2$s AND %3$s
                   UNION ALL
                   SELECT %1$s, 'cached_input',  cached_credits FROM annotated_events WHERE cached_credits IS NOT NULL
-                    AND %2$s
+                    AND %2$s AND %3$s
                   UNION ALL
                   SELECT %1$s, 'output',        output_credits FROM annotated_events WHERE output_credits IS NOT NULL
-                    AND %2$s
+                    AND %2$s AND %3$s
                 )
                 GROUP BY bucket, series
                 ORDER BY bucket
-                """.formatted(b, TIME_FILTER))
-                .param("sinceEpoch", range(range).sinceEpoch(Instant.now()))
+                """.formatted(b, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
                 .param("grainSeconds", grain(grain).seconds())
                 .query(SeriesPoint.class).list();
     }
 
+    @GET
+    @Path("/cost/by-model")
+    public List<CostByModel> costByModel(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(rate_model, model, 'unknown') AS rate_model,
+                       count(*)                               AS n,
+                       sum(input_token_count)                 AS in_tok,
+                       sum(output_token_count)                AS out_tok,
+                       round(sum(cost_usd), 6)                AS cost_usd
+                FROM annotated_events
+                WHERE cost_usd IS NOT NULL
+                  AND %s
+                  AND %s
+                GROUP BY rate_model
+                ORDER BY cost_usd DESC
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
+                .query(CostByModel.class).list();
+    }
+
+    @GET
+    @Path("/cost/by-trigger")
+    public List<CostByTrigger> costByTrigger(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(trigger, 'unknown') AS trigger,
+                       count(*)                     AS n,
+                       round(sum(cost_usd), 6)      AS cost_usd
+                FROM annotated_events
+                WHERE cost_usd IS NOT NULL
+                  AND %s
+                  AND %s
+                GROUP BY trigger
+                ORDER BY cost_usd DESC
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
+                .query(CostByTrigger.class).list();
+    }
+
+    @GET
+    @Path("/cost/by-model-trigger")
+    public List<CostByModelTrigger> costByModelTrigger(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(rate_model, model, 'unknown') AS rate_model,
+                       COALESCE(trigger, 'unknown')           AS trigger,
+                       count(*)                               AS n,
+                       round(sum(cost_usd), 6)                AS cost_usd
+                FROM annotated_events
+                WHERE cost_usd IS NOT NULL
+                  AND %s
+                  AND %s
+                GROUP BY rate_model, trigger
+                ORDER BY cost_usd DESC
+                """.formatted(TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
+                .query(CostByModelTrigger.class).list();
+    }
+
+    @GET
+    @Path("/tokens/by-model")
+    public List<TokenByModel> tokensByModel(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        String tokens = tokenAmountExpression(sourceTool);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(rate_model, model, 'unknown') AS rate_model,
+                       count(*)                               AS n,
+                       CAST(sum(%1$s) AS INTEGER)             AS tokens
+                FROM annotated_events
+                WHERE %1$s > 0
+                  AND %2$s
+                  AND %3$s
+                GROUP BY rate_model
+                ORDER BY tokens DESC
+                """.formatted(tokens, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query(TokenByModel.class).list();
+    }
+
+    @GET
+    @Path("/tokens/by-trigger")
+    public List<TokenByTrigger> tokensByTrigger(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        String tokens = tokenAmountExpression(sourceTool);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(trigger, 'unknown') AS trigger,
+                       count(*)                     AS n,
+                       CAST(sum(%1$s) AS INTEGER)   AS tokens
+                FROM annotated_events
+                WHERE %1$s > 0
+                  AND %2$s
+                  AND %3$s
+                GROUP BY trigger
+                ORDER BY tokens DESC
+                """.formatted(tokens, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query(TokenByTrigger.class).list();
+    }
+
+    @GET
+    @Path("/tokens/by-model-trigger")
+    public List<TokenByModelTrigger> tokensByModelTrigger(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        String tokens = tokenAmountExpression(sourceTool);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT COALESCE(rate_model, model, 'unknown') AS rate_model,
+                       COALESCE(trigger, 'unknown')           AS trigger,
+                       count(*)                               AS n,
+                       CAST(sum(%1$s) AS INTEGER)             AS tokens
+                FROM annotated_events
+                WHERE %1$s > 0
+                  AND %2$s
+                  AND %3$s
+                GROUP BY rate_model, trigger
+                ORDER BY tokens DESC
+                """.formatted(tokens, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .query(TokenByModelTrigger.class).list();
+    }
+
+    @GET
+    @Path("/cost/by-trigger-timeseries")
+    public List<CostSeriesPoint> costByTriggerOverTime(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT %s                            AS bucket,
+                       COALESCE(trigger, 'unknown')  AS series,
+                       round(sum(cost_usd), 6)       AS cost_usd
+                FROM annotated_events
+                WHERE cost_usd IS NOT NULL
+                  AND %s
+                  AND %s
+                GROUP BY bucket, series
+                ORDER BY bucket
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool(source))
+                .param("grainSeconds", grain(grain).seconds())
+                .query(CostSeriesPoint.class).list();
+    }
+
+    @GET
+    @Path("/cost/by-type-timeseries")
+    public List<CostSeriesPoint> costByTypeOverTime(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        String sql = "claude".equals(sourceTool)
+                ? claudeCostByTypeSql()
+                : codexCostByTypeSql();
+        return db.sql(sql)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .param("grainSeconds", grain(grain).seconds())
+                .query(CostSeriesPoint.class).list();
+    }
+
+    @GET
+    @Path("/tokens/by-type-timeseries")
+    public List<TokenSeriesPoint> tokensByTypeOverTime(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        String sql = "claude".equals(sourceTool)
+                ? claudeTokensByTypeSql()
+                : codexTokensByTypeSql();
+        return db.sql(sql)
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .param("grainSeconds", grain(grain).seconds())
+                .query(TokenSeriesPoint.class).list();
+    }
+
+    @GET
+    @Path("/tokens/by-trigger-timeseries")
+    public List<TokenSeriesPoint> tokensByTriggerOverTime(
+            @QueryParam("range") @DefaultValue("6h") String range,
+            @QueryParam("source") @DefaultValue("codex") String source,
+            @QueryParam("grain") @DefaultValue("5m") String grain,
+            @QueryParam("from") Long fromEpoch,
+            @QueryParam("to") Long toEpoch) {
+        String sourceTool = sourceTool(source);
+        String tokens = tokenAmountExpression(sourceTool);
+        TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
+        return db.sql("""
+                SELECT %1$s                           AS bucket,
+                       COALESCE(trigger, 'unknown')   AS series,
+                       CAST(sum(%2$s) AS INTEGER)     AS tokens
+                FROM annotated_events
+                WHERE %2$s > 0
+                  AND %3$s
+                  AND %4$s
+                GROUP BY bucket, series
+                ORDER BY bucket
+                """.formatted(BUCKET, tokens, TIME_FILTER, SOURCE_FILTER))
+                .param("sinceEpoch", time.sinceEpoch())
+                .param("untilEpoch", time.untilEpoch())
+                .param("sourceTool", sourceTool)
+                .param("grainSeconds", grain(grain).seconds())
+                .query(TokenSeriesPoint.class).list();
+    }
+
+    private static String codexTokensByTypeSql() {
+        return """
+                SELECT bucket, series, sum(tokens) AS tokens FROM (
+                  SELECT %1$s AS bucket,
+                         'uncached_input' AS series,
+                         max(coalesce(input_token_count, 0) - coalesce(cached_input_token_count, 0), 0) AS tokens
+                    FROM annotated_events WHERE input_token_count IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'cached_input', cached_input_token_count
+                    FROM annotated_events WHERE cached_input_token_count IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'output', output_token_count
+                    FROM annotated_events WHERE output_token_count IS NOT NULL AND %2$s AND %3$s
+                )
+                GROUP BY bucket, series
+                HAVING tokens > 0
+                ORDER BY bucket
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER);
+    }
+
+    private static String codexCostByTypeSql() {
+        return """
+                SELECT bucket, series, round(sum(cost_usd), 6) AS cost_usd FROM (
+                  SELECT %1$s AS bucket, 'uncached_input' AS series, input_cost_usd AS cost_usd
+                    FROM annotated_events WHERE input_cost_usd IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'cached_input', cached_input_cost_usd
+                    FROM annotated_events WHERE cached_input_cost_usd IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'output', output_cost_usd
+                    FROM annotated_events WHERE output_cost_usd IS NOT NULL AND %2$s AND %3$s
+                )
+                GROUP BY bucket, series
+                HAVING cost_usd > 0
+                ORDER BY bucket
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER);
+    }
+
+    private static String claudeCostByTypeSql() {
+        return """
+                SELECT bucket, series, round(sum(cost_usd), 6) AS cost_usd FROM (
+                  SELECT %1$s AS bucket, 'input' AS series, input_cost_usd AS cost_usd
+                    FROM annotated_events WHERE input_cost_usd IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'cache_creation', cache_creation_cost_usd
+                    FROM annotated_events WHERE cache_creation_cost_usd IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'cache_read', cache_read_cost_usd
+                    FROM annotated_events WHERE cache_read_cost_usd IS NOT NULL AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'output', output_cost_usd
+                    FROM annotated_events WHERE output_cost_usd IS NOT NULL AND %2$s AND %3$s
+                )
+                GROUP BY bucket, series
+                HAVING cost_usd > 0
+                ORDER BY bucket
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER);
+    }
+
+    private static String claudeTokensByTypeSql() {
+        return """
+                SELECT bucket, series, sum(tokens) AS tokens FROM (
+                  SELECT %1$s AS bucket,
+                         'input' AS series,
+                         CAST(COALESCE(json_extract(attributes_json, '$.input_tokens'), 0) AS INTEGER) AS tokens
+                    FROM annotated_events WHERE attributes_json IS NOT NULL
+                      AND json_extract(attributes_json, '$.input_tokens') IS NOT NULL
+                      AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'cache_creation',
+                         CAST(COALESCE(json_extract(attributes_json, '$.cache_creation_tokens'), 0) AS INTEGER)
+                    FROM annotated_events WHERE attributes_json IS NOT NULL
+                      AND json_extract(attributes_json, '$.cache_creation_tokens') IS NOT NULL
+                      AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'cache_read',
+                         CAST(COALESCE(json_extract(attributes_json, '$.cache_read_tokens'), 0) AS INTEGER)
+                    FROM annotated_events WHERE attributes_json IS NOT NULL
+                      AND json_extract(attributes_json, '$.cache_read_tokens') IS NOT NULL
+                      AND %2$s AND %3$s
+                  UNION ALL
+                  SELECT %1$s, 'output', output_token_count
+                    FROM annotated_events WHERE output_token_count IS NOT NULL AND %2$s AND %3$s
+                )
+                GROUP BY bucket, series
+                HAVING tokens > 0
+                ORDER BY bucket
+                """.formatted(BUCKET, TIME_FILTER, SOURCE_FILTER);
+    }
+
+    private static String tokenAmountExpression(String sourceTool) {
+        if ("claude".equals(sourceTool)) {
+            return """
+                    (CAST(coalesce(json_extract(attributes_json, '$.input_tokens'), 0) AS INTEGER)
+                    + CAST(coalesce(json_extract(attributes_json, '$.cache_creation_tokens'), 0) AS INTEGER)
+                    + CAST(coalesce(json_extract(attributes_json, '$.cache_read_tokens'), 0) AS INTEGER)
+                    + coalesce(output_token_count, 0))
+                    """;
+        }
+        return """
+                (max(coalesce(input_token_count, 0) - coalesce(cached_input_token_count, 0), 0)
+                + coalesce(cached_input_token_count, 0)
+                + coalesce(output_token_count, 0))
+                """;
+    }
+
     private static int clamp(int v, int min, int max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    private static TimeBounds timeBounds(String range, Long fromEpoch, Long toEpoch) {
+        long now = Instant.now().getEpochSecond();
+        Long normalizedTo = normalizeEpoch(toEpoch);
+        long until = normalizedTo == null ? now : normalizedTo;
+        Long normalizedFrom = normalizeEpoch(fromEpoch);
+        long since = normalizedFrom == null
+                ? range(range).sinceEpoch(Instant.ofEpochSecond(until))
+                : normalizedFrom;
+        if (since >= until) {
+            since = range(range).sinceEpoch(Instant.ofEpochSecond(until));
+        }
+        if (since >= until) {
+            since = until - DEFAULT_RANGE.seconds();
+        }
+        return new TimeBounds(since, until);
+    }
+
+    private static Long normalizeEpoch(Long value) {
+        if (value == null || value <= 0) {
+            return null;
+        }
+        return value > 100_000_000_000L ? value / 1000 : value;
     }
 
     private static TimeRange range(String id) {
@@ -514,5 +1138,9 @@ public class DashboardApi {
 
     private static TimeGrain grain(String id) {
         return GRAINS.getOrDefault(id, DEFAULT_GRAIN);
+    }
+
+    private static String sourceTool(String source) {
+        return "claude".equals(source) ? "claude" : "codex";
     }
 }
