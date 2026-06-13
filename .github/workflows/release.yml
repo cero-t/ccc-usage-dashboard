@@ -1,7 +1,8 @@
 name: release
 
 # Build the macOS (Apple Silicon) single-binary native image on a version tag and
-# attach it to the GitHub Release. Tag with e.g. `git tag v0.1.0 && git push --tags`.
+# attach it to a draft GitHub Release. Tag with e.g.
+# `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
 on:
   push:
     tags: ["v*"]
@@ -37,4 +38,5 @@ jobs:
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: dist/codex-usage-dashboard-macos-arm64.zip

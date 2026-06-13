@@ -209,13 +209,13 @@ public class AnnotateJob {
         } else if (threadCache.containsKey(threadId)) {
             thread = threadCache.get(threadId);
         } else {
-            thread = codex.lookupThread(connections.state5(), threadId);
+            thread = codex.lookupThread(connections.state5s(), threadId);
             threadCache.put(threadId, thread);
         }
 
         // Attribute the turn (user / ambient / memory / background).
         // Cached per thread within the pass.
-        String trigger = classifyTrigger(threadId, thread.isPresent(), connections.logs2(), triggerCache);
+        String trigger = classifyTrigger(threadId, thread.isPresent(), connections.logs2s(), triggerCache);
 
         CodexDb.ThreadInfo ti = thread.orElse(null);
         String eventModel = optString(attrs, "model");
@@ -391,7 +391,7 @@ public class AnnotateJob {
      * in state_5 → user; otherwise the logs_2 body decides ambient / memory,
      * defaulting to background.
      */
-    private String classifyTrigger(String threadId, boolean knownThread, Connection logs2,
+    private String classifyTrigger(String threadId, boolean knownThread, List<Connection> logs2s,
                                    Map<String, String> cache) {
         if (threadId == null || threadId.isBlank()) {
             return "background";
@@ -400,10 +400,10 @@ public class AnnotateJob {
             return "user";
         }
         return cache.computeIfAbsent(threadId, t -> {
-            if (codex.threadHasSignature(logs2, t, AMBIENT_SIGNATURES)) {
+            if (codex.threadHasSignature(logs2s, t, AMBIENT_SIGNATURES)) {
                 return "ambient";
             }
-            if (codex.threadHasSignature(logs2, t, MEMORY_SIGNATURES)) {
+            if (codex.threadHasSignature(logs2s, t, MEMORY_SIGNATURES)) {
                 return "memory";
             }
             return "background";
@@ -532,37 +532,47 @@ public class AnnotateJob {
         }
     }
 
+    private static void closeAll(List<Connection> connections) {
+        if (connections == null) {
+            return;
+        }
+        for (Connection connection : connections) {
+            close(connection);
+        }
+    }
+
     public record RawRow(long id, String recordJson) {}
 
     private final class CodexConnections implements AutoCloseable {
-        private Connection state5;
-        private Connection logs2;
+        private List<Connection> state5s;
+        private List<Connection> logs2s;
         private boolean logs2Attempted;
 
-        Connection state5() throws SQLException {
-            if (state5 == null) {
-                state5 = codex.openState5();
+        List<Connection> state5s() throws SQLException {
+            if (state5s == null) {
+                state5s = codex.openState5();
             }
-            return state5;
+            return state5s;
         }
 
-        Connection logs2() {
+        List<Connection> logs2s() {
             if (logs2Attempted) {
-                return logs2;
+                return logs2s;
             }
             logs2Attempted = true;
             try {
-                logs2 = codex.openLogs2();
+                logs2s = codex.openLogs2();
             } catch (SQLException e) {
                 LOG.debugf("logs_2 unavailable this pass, trigger falls back where needed: %s", e.getMessage());
+                logs2s = List.of();
             }
-            return logs2;
+            return logs2s;
         }
 
         @Override
         public void close() {
-            AnnotateJob.close(state5);
-            AnnotateJob.close(logs2);
+            closeAll(state5s);
+            closeAll(logs2s);
         }
     }
 }

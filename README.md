@@ -192,9 +192,8 @@ CODEX_USAGE_DASHBOARD_RETENTION_OTEL_LOG_RECORDS=14d
 CODEX_USAGE_DASHBOARD_RETENTION_ANNOTATED_EVENTS=365d
 CODEX_USAGE_DASHBOARD_RETENTION_USAGE_SAMPLES=365d
 
-# Codex local state paths
-CODEX_STATE5_PATH="$HOME/.codex/state_5.sqlite"
-CODEX_LOGS2_PATH="$HOME/.codex/logs_2.sqlite"
+# Codex local data directory
+CODEX_DB_DIR="$HOME/.codex"
 CODEX_BIN=codex
 
 # Receive-time drop filter for noisy OTLP log records

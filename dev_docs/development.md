@@ -180,3 +180,12 @@ Before creating a public repository or release:
 - Do not commit local logs or `.env` files.
 - Verify the release binary starts with localhost-only defaults.
 - Verify `README.md` still describes binary usage rather than development setup.
+
+Release flow:
+
+1. Push the release commit to `main`.
+2. Create and push an annotated version tag, for example
+   `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+3. Let the release workflow build the native binary and create a draft GitHub
+   Release with the zip asset attached.
+4. Review the draft release notes and asset, then publish the release manually.

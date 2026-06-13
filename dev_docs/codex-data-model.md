@@ -6,8 +6,9 @@ observed contract, not a stable upstream API.
 
 Validated locally on 2026-06-09 against:
 
-- `~/.codex/logs_2.sqlite`
-- `~/.codex/state_5.sqlite`
+- `~/.codex/sqlite/logs_2.sqlite`
+- `~/.codex/sqlite/state_5.sqlite`
+- legacy layout under `~/.codex/`
 - `data/codex-usage-dashboard.sqlite`
 
 ## OTLP Completion Records

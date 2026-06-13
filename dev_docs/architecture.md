@@ -66,8 +66,9 @@ Codex rows are kept when they contain either:
 
 Codex rows are enriched from Codex local SQLite:
 
-- `~/.codex/state_5.sqlite`, table `threads`
-- `~/.codex/logs_2.sqlite`, table `logs`
+- `~/.codex/sqlite/state_5.sqlite`, table `threads`
+- `~/.codex/sqlite/logs_2.sqlite`, table `logs`
+- legacy layout `~/.codex/state_5.sqlite` and `~/.codex/logs_2.sqlite`
 
 Claude Code rows are kept when `resource_attributes.service.name` starts with
 `claude-code`, or the log body/event name identifies a Claude Code API event.
