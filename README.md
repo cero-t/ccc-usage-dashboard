@@ -99,7 +99,9 @@ Restart Codex after changing the config. New Codex activity should start filling
 the dashboard within about a minute.
 
 Keep this dashboard process running while you use Codex or Claude Code to capture
-new OTLP events. Events emitted while it is stopped are not backfilled.
+new OTLP events. Events emitted while it is stopped are not backfilled. To keep it
+running automatically in the background, see
+[Running as a service](docs/running-as-a-service.md).
 
 ## Configure Claude Code OTLP
 
@@ -177,6 +179,11 @@ QUARKUS_GRPC_SERVER_HOST=0.0.0.0 \
 ```
 
 Then open `http://<machine-ip>:4318/` from another device.
+
+For remote access without exposing the unauthenticated dashboard to every device
+on your LAN, you can keep the app bound to localhost and reach it over
+[Tailscale Serve](docs/running-as-a-service.md#secure-remote-access-with-tailscale-serve)
+instead.
 
 ## Configuration
 
