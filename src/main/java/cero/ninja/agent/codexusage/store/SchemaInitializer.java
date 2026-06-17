@@ -43,6 +43,16 @@ public class SchemaInitializer {
             ON otel_log_records(received_at)
             """;
 
+    // Expression index matching AnnotateJob.SELECT_CLAUDE_USER_PROMPT: without it
+    // the per-prompt "is this a claude user_prompt?" lookup full-scans the raw log
+    // table (100k+ rows of JSON), holding the single pooled connection for seconds
+    // and starving every other DB caller. Must match the query's json_extract path
+    // verbatim so the planner uses it (SCAN -> SEARCH).
+    private static final String RAW_PROMPT_ID_INDEX = """
+            CREATE INDEX IF NOT EXISTS idx_otel_log_records_prompt_id
+            ON otel_log_records(json_extract(record_json, '$.attributes."prompt.id"'))
+            """;
+
     private static final String ANNOTATED_TABLE = """
             CREATE TABLE IF NOT EXISTS annotated_events (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -261,6 +271,7 @@ public class SchemaInitializer {
         db.sql(ANNOTATED_CREDIT_TIME_INDEX).update();
         db.sql(ANNOTATED_REQUEST_INDEX).update();
         db.sql(RAW_RECEIVED_AT_INDEX).update();
+        db.sql(RAW_PROMPT_ID_INDEX).update();
         db.sql(USAGE_WINDOW_TIME_INDEX).update();
         db.sql(USAGE_SAMPLED_AT_INDEX).update();
     }
