@@ -1,5 +1,7 @@
 # Running as a service & secure remote access
 
+**English** | [日本語](running-as-a-service.ja.md)
+
 The dashboard only captures OTLP events while it is running — events emitted while
 it is stopped are not backfilled. To get a continuous picture of your usage it
 helps to keep it always-on. This guide shows how to run it as a background service

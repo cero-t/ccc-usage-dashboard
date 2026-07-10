@@ -79,7 +79,7 @@ exporter = { otlp-grpc = { endpoint = "http://127.0.0.1:4317" } }
 
 設定変更後は Codex を再起動してください。新しい Codex のアクティビティが、1分ほどでダッシュボードに反映され始めます。
 
-新しい OTLP イベントを記録するには、Codex や Claude Code を使っている間このダッシュボードのプロセスを起動しておく必要があります。停止中に送信されたイベントは後から取り込まれません。
+新しい OTLP イベントを記録するには、Codex や Claude Code を使っている間このダッシュボードのプロセスを起動しておく必要があります。停止中に送信されたイベントは後から取り込まれません。自動的にバックグラウンドで常時実行する方法は、[サービスとしての実行](docs/running-as-a-service.ja.md)を参照してください。
 
 ## Claude Code の OTLP 設定
 
@@ -141,6 +141,8 @@ QUARKUS_GRPC_SERVER_HOST=0.0.0.0 \
 ```
 
 他の端末から `http://<machine-ip>:4318/` を開きます。
+
+認証のないダッシュボードをLAN全体へ公開せずにリモートアクセスする場合は、localhostでの待受を維持したまま[Tailscale Serveを利用する方法](docs/running-as-a-service.ja.md)を参照してください。
 
 ## 設定
 
