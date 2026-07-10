@@ -6,7 +6,7 @@
 
   <groupId>cero.ninja.agent</groupId>
   <artifactId>codex-usage-dashboard</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <packaging>quarkus</packaging>
   <name>codex-usage-dashboard</name>
   <description>Single-binary local dashboard for Codex usage, credit estimates, and attribution.</description>
