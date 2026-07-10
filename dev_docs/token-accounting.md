@@ -146,8 +146,19 @@ As of 2026-07-10:
 | gpt-5.3-codex-spark | research preview | research preview | research preview |
 | gpt-5.3-codex (historical) | 43.75 | 4.375 | 350 |
 | gpt-5.2 (historical) | 43.75 | 4.375 | 350 |
+| gpt-image-2 (image tokens) | 200 | 50 | 750 |
+| gpt-image-2 (text tokens) | 125 | 31.25 | 250 |
 
 Unknown models fall back to `gpt-5.6` / GPT-5.6 Sol rates.
+
+Codex OTLP completion events expose aggregate input, cached-input, and output
+token counts, but not the image/text token details needed to apply both
+GPT-Image-2 rows exactly. `RateCard` therefore recognizes `gpt-image-2`, the
+`gpt-image-2.0` name tracked by issue #2, and the
+`gpt-image-2-2026-04-21` snapshot, and applies the image-token row to all three
+aggregate counts. This prevents the unrelated unknown-model fallback and makes
+mixed input an upper-bound estimate: text input may be overestimated until
+Codex exports the modality split.
 
 GPT-5.3-Codex-Spark has its own research-preview usage limits and OpenAI does
 not publish a per-token credit rate. `RateCard` therefore maps it to zero
