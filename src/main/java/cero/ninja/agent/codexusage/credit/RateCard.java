@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * OpenAI Codex rate card — credits per 1M tokens as {input, cached, output}.
- * VERIFY against https://developers.openai.com/codex/pricing — it changes.
+ * VERIFY against https://learn.chatgpt.com/docs/pricing — it changes.
  *
  * <p>One request's credits are additive over three components:
  * <pre>
@@ -25,15 +25,21 @@ import java.util.Map;
 public class RateCard {
 
     private static final Map<String, double[]> RATES = Map.of(
+            "gpt-5.6", new double[]{125, 12.5, 750},
+            "gpt-5.6-sol", new double[]{125, 12.5, 750},
+            "gpt-5.6-terra", new double[]{62.5, 6.25, 375},
+            "gpt-5.6-luna", new double[]{25, 2.5, 150},
             "gpt-5.5", new double[]{125, 12.5, 750},
             "gpt-5.4", new double[]{62.5, 6.25, 375},
             "gpt-5.4-mini", new double[]{18.75, 1.875, 113},
+            // Research preview with separate usage limits; no per-token credit rate is published.
+            "gpt-5.3-codex-spark", new double[]{0, 0, 0},
             "gpt-5.3-codex", new double[]{43.75, 4.375, 350},
             "gpt-5.2", new double[]{43.75, 4.375, 350}
     );
 
-    // Unrecognized model is billed at GPT-5.3-Codex rates.
-    private static final double[] FALLBACK = RATES.get("gpt-5.3-codex");
+    // Unrecognized model is billed at the current GPT-5.6 (Sol) rate.
+    private static final double[] FALLBACK = RATES.get("gpt-5.6");
 
     public double[] rateFor(String model) {
         if (model == null) {

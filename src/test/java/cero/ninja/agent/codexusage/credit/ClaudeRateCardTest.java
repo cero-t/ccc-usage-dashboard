@@ -25,6 +25,22 @@ class ClaudeRateCardTest {
     }
 
     @Test
+    void computesSonnet5IntroductoryCostsThroughAugust2026() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-sonnet-5",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(2.0, costs.input());
+        assertEquals(2.5, costs.cacheCreation());
+        assertEquals(0.2, costs.cacheRead());
+        assertEquals(10.0, costs.output());
+        assertEquals(14.7, costs.total());
+    }
+
+    @Test
     void mapsVersionedHaiku45ModelIds() {
         ClaudeRateCard.Costs costs = rateCard.compute(
                 "claude-haiku-4-5-20251001",
