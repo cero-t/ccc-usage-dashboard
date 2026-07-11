@@ -1,6 +1,6 @@
 # Developer Docs
 
-These notes are for maintainers of the Java single-binary `codex-usage-dashboard`.
+These notes are for maintainers of the Java single-binary `ccc-usage-dashboard`.
 
 - [`architecture.md`](architecture.md): cross-tool pipeline, database tables, API/UI shape, and security posture
 - [`codex-data-model.md`](codex-data-model.md): observed OTLP / Codex SQLite fields, turn correlation limits, and service-tier confidence

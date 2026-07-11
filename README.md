@@ -1,9 +1,9 @@
-# codex-usage-dashboard
+# CCC — Codex and Claude Code Usage Dashboard
 
 **English** | [日本語](README.ja.md)
 
-`codex-usage-dashboard` is a local, single-binary dashboard for Codex and Claude
-Code usage, cost estimates, and attribution.
+CCC is a local, single-binary usage, cost, quota, and attribution dashboard for
+Codex and Claude Code.
 
 It shows Codex and Claude Code on separate dashboard tabs, with usage history,
 token totals, estimated USD cost, and attribution breakdowns. Codex USD cost is
@@ -41,9 +41,9 @@ The prebuilt binary is **macOS only** (Apple Silicon). Download it from the
 [Releases](../../releases) page, then run it:
 
 ```sh
-unzip codex-usage-dashboard-macos-arm64.zip
-chmod +x codex-usage-dashboard
-./codex-usage-dashboard
+unzip ccc-usage-dashboard-macos-arm64.zip
+chmod +x ccc-usage-dashboard
+./ccc-usage-dashboard
 ```
 
 The release binary is not currently signed or notarized. If macOS blocks it with
@@ -51,8 +51,8 @@ The release binary is not currently signed or notarized. If macOS blocks it with
 attribute and run it again:
 
 ```sh
-xattr -d com.apple.quarantine codex-usage-dashboard
-./codex-usage-dashboard
+xattr -d com.apple.quarantine ccc-usage-dashboard
+./ccc-usage-dashboard
 ```
 
 On another platform, or want to build it yourself? Build from source — see
@@ -84,6 +84,9 @@ data/codex-usage-dashboard.sqlite
 ```
 
 relative to the directory where you run the binary.
+
+The legacy database filename and `CODEX_USAGE_DASHBOARD_*` environment variable
+prefix are intentionally retained for compatibility during the product rename.
 
 ## Configure Codex OTLP
 
@@ -175,7 +178,7 @@ To intentionally expose it on your LAN:
 ```sh
 QUARKUS_HTTP_HOST=0.0.0.0 \
 QUARKUS_GRPC_SERVER_HOST=0.0.0.0 \
-./codex-usage-dashboard
+./ccc-usage-dashboard
 ```
 
 Then open `http://<machine-ip>:4318/` from another device.

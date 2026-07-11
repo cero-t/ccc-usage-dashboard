@@ -1,8 +1,8 @@
-# codex-usage-dashboard
+# CCC — Codex and Claude Code Usage Dashboard
 
 [English](README.md) | **日本語**
 
-`codex-usage-dashboard` は、Codex と Claude Code の利用状況・コスト推定・利用主体(trigger)をローカルで確認できる、単一バイナリのダッシュボードです。
+CCC は、Codex と Claude Code の利用状況、コスト、利用枠、利用主体(trigger)をローカルで確認できる、単一バイナリのダッシュボードです。
 
 ダッシュボード上では Codex / Claude Code を別タブで表示し、利用履歴、トークン数、USD コスト推定、利用主体の内訳を確認できます。Codex の USD コストは 1000 credits = $40 として概算し、Claude Code の USD コストは Claude Code テレメトリと Claude API の料金表から計算します。
 
@@ -31,16 +31,16 @@
 ビルド済みバイナリは **macOS 専用**(Apple Silicon)です。[Releases](../../releases) ページからダウンロードして実行します:
 
 ```sh
-unzip codex-usage-dashboard-macos-arm64.zip
-chmod +x codex-usage-dashboard
-./codex-usage-dashboard
+unzip ccc-usage-dashboard-macos-arm64.zip
+chmod +x ccc-usage-dashboard
+./ccc-usage-dashboard
 ```
 
 現在のリリースバイナリは署名・notarize していません。macOS で "Apple could not verify" と表示されて起動できない場合、ダウンロードしたファイルを信頼できるときだけ quarantine 属性を外して再実行してください:
 
 ```sh
-xattr -d com.apple.quarantine codex-usage-dashboard
-./codex-usage-dashboard
+xattr -d com.apple.quarantine ccc-usage-dashboard
+./ccc-usage-dashboard
 ```
 
 別のプラットフォームを使う場合や、自分でビルドしたい場合は、ソースからビルドしてください — [`dev_docs/development.md`](dev_docs/development.md) を参照。
@@ -67,6 +67,8 @@ data/codex-usage-dashboard.sqlite
 ```
 
 (バイナリを実行したディレクトリからの相対パス)
+
+製品名の変更中も既存環境との互換性を保つため、従来のデータベースファイル名と `CODEX_USAGE_DASHBOARD_*` 環境変数プレフィックスは意図的に維持しています。
 
 ## Codex の OTLP 設定
 
@@ -137,7 +139,7 @@ QUARKUS_HTTP_PORT=14318
 ```sh
 QUARKUS_HTTP_HOST=0.0.0.0 \
 QUARKUS_GRPC_SERVER_HOST=0.0.0.0 \
-./codex-usage-dashboard
+./ccc-usage-dashboard
 ```
 
 他の端末から `http://<machine-ip>:4318/` を開きます。

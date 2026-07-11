@@ -31,12 +31,12 @@ jobs:
       - name: Stage artifact
         run: |
           mkdir -p dist
-          cp target/codex-usage-dashboard dist/codex-usage-dashboard
+          cp target/ccc-usage-dashboard dist/ccc-usage-dashboard
           cd dist
-          ditto -c -k codex-usage-dashboard codex-usage-dashboard-macos-arm64.zip
+          ditto -c -k ccc-usage-dashboard ccc-usage-dashboard-macos-arm64.zip
 
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: dist/codex-usage-dashboard-macos-arm64.zip
+          files: dist/ccc-usage-dashboard-macos-arm64.zip

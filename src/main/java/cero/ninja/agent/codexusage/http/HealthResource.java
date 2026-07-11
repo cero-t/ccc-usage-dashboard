@@ -15,7 +15,7 @@ public class HealthResource {
     public Map<String, Object> health() {
         return Map.of(
                 "status", "ok",
-                "service", "codex-usage-dashboard"
+                "service", "ccc-usage-dashboard"
         );
     }
 }

@@ -6,7 +6,9 @@
 
 ## バックグラウンドサービスとして実行する（macOS、launchd）
 
-`~/Library/LaunchAgents/com.example.codex-usage-dashboard.plist` にLaunchAgentを作成します。`YOUR_USERNAME`と各パスは、実際のインストール先に合わせて置き換えてください。
+`~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist` にLaunchAgentを作成します。`YOUR_USERNAME`と各パスは、実際のインストール先に合わせて置き換えてください。
+
+既存環境をアップグレードする場合、現在の plist label と作業ディレクトリはそのまま利用できます。`ProgramArguments` だけを新しい `ccc-usage-dashboard` 実行ファイルへ向け、既存の `data/codex-usage-dashboard.sqlite` を引き続き利用できるよう、作業ディレクトリは変更しないでください。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -14,14 +16,14 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.example.codex-usage-dashboard</string>
+  <string>com.example.ccc-usage-dashboard</string>
   <key>ProgramArguments</key>
   <array>
     <!-- 配布済みバイナリ: -->
-    <string>/Users/YOUR_USERNAME/codex-usage-dashboard/codex-usage-dashboard</string>
+    <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/ccc-usage-dashboard</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/YOUR_USERNAME/codex-usage-dashboard</string>
+  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -29,9 +31,9 @@
   <key>ProcessType</key>
   <string>Background</string>
   <key>StandardOutPath</key>
-  <string>/Users/YOUR_USERNAME/codex-usage-dashboard/logs/dashboard.out.log</string>
+  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/YOUR_USERNAME/codex-usage-dashboard/logs/dashboard.err.log</string>
+  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.err.log</string>
 </dict>
 </plist>
 ```
@@ -46,29 +48,29 @@
   <array>
     <string>/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home/bin/java</string>
     <string>-jar</string>
-    <string>/Users/YOUR_USERNAME/codex-usage-dashboard/target/quarkus-app/quarkus-run.jar</string>
+    <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/target/quarkus-app/quarkus-run.jar</string>
   </array>
 ```
 
 LaunchAgentを読み込み、起動します。
 
 ```sh
-mkdir -p ~/codex-usage-dashboard/logs
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.codex-usage-dashboard.plist
-launchctl kickstart -k gui/$(id -u)/com.example.codex-usage-dashboard
+mkdir -p ~/ccc-usage-dashboard/logs
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist
+launchctl kickstart -k gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
 
 稼働状態を確認します。
 
 ```sh
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4318/   # => 200
-launchctl print gui/$(id -u)/com.example.codex-usage-dashboard | grep -E "state =|pid ="
+launchctl print gui/$(id -u)/com.example.ccc-usage-dashboard | grep -E "state =|pid ="
 ```
 
 停止または登録解除する場合は、次のコマンドを実行します。
 
 ```sh
-launchctl bootout gui/$(id -u)/com.example.codex-usage-dashboard
+launchctl bootout gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
 
 > Linuxでは、`systemd --user`ユニットでも同様に常駐化できます。`ExecStart`にバイナリまたは`java -jar ...`を指定し、`Restart=always`と`WantedBy=default.target`を設定します。

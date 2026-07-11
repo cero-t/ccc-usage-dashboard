@@ -11,8 +11,13 @@ the unauthenticated dashboard to your whole LAN.
 ## Run as a background service (macOS, launchd)
 
 Create a LaunchAgent at
-`~/Library/LaunchAgents/com.example.codex-usage-dashboard.plist`. Replace
+`~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist`. Replace
 `YOUR_USERNAME` and the paths to match your install.
+
+When upgrading an existing installation, you may keep its current plist label
+and working directory. Point `ProgramArguments` at the new
+`ccc-usage-dashboard` executable, and keep the working directory unchanged so
+the existing `data/codex-usage-dashboard.sqlite` remains in use.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,14 +25,14 @@ Create a LaunchAgent at
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.example.codex-usage-dashboard</string>
+  <string>com.example.ccc-usage-dashboard</string>
   <key>ProgramArguments</key>
   <array>
     <!-- Prebuilt binary: -->
-    <string>/Users/YOUR_USERNAME/codex-usage-dashboard/codex-usage-dashboard</string>
+    <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/ccc-usage-dashboard</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/YOUR_USERNAME/codex-usage-dashboard</string>
+  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -35,9 +40,9 @@ Create a LaunchAgent at
   <key>ProcessType</key>
   <string>Background</string>
   <key>StandardOutPath</key>
-  <string>/Users/YOUR_USERNAME/codex-usage-dashboard/logs/dashboard.out.log</string>
+  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/YOUR_USERNAME/codex-usage-dashboard/logs/dashboard.err.log</string>
+  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.err.log</string>
 </dict>
 </plist>
 ```
@@ -54,29 +59,29 @@ If you built from source (JVM package) instead of using the prebuilt binary, swa
   <array>
     <string>/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home/bin/java</string>
     <string>-jar</string>
-    <string>/Users/YOUR_USERNAME/codex-usage-dashboard/target/quarkus-app/quarkus-run.jar</string>
+    <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/target/quarkus-app/quarkus-run.jar</string>
   </array>
 ```
 
 Load and start it:
 
 ```sh
-mkdir -p ~/codex-usage-dashboard/logs
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.codex-usage-dashboard.plist
-launchctl kickstart -k gui/$(id -u)/com.example.codex-usage-dashboard
+mkdir -p ~/ccc-usage-dashboard/logs
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist
+launchctl kickstart -k gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
 
 Verify and inspect:
 
 ```sh
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4318/   # => 200
-launchctl print gui/$(id -u)/com.example.codex-usage-dashboard | grep -E "state =|pid ="
+launchctl print gui/$(id -u)/com.example.ccc-usage-dashboard | grep -E "state =|pid ="
 ```
 
 To stop or remove it:
 
 ```sh
-launchctl bootout gui/$(id -u)/com.example.codex-usage-dashboard
+launchctl bootout gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
 
 > Linux users can achieve the same with a `systemd --user` unit (`ExecStart` the

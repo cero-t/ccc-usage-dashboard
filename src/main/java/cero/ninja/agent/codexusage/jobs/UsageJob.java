@@ -106,8 +106,8 @@ public class UsageJob {
                         "id", 0,
                         "params", Map.of(
                                 "clientInfo", Map.of(
-                                        "name", "codex-usage-dashboard",
-                                        "title", "codex-usage-dashboard",
+                                        "name", "ccc-usage-dashboard",
+                                        "title", "CCC — Codex and Claude Code Usage Dashboard",
                                         "version", "0.1.0"),
                                 "capabilities", Map.of("experimentalApi", true))),
                 Map.of("method", "initialized", "params", Map.of()),

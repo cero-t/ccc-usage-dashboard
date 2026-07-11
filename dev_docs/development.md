@@ -54,11 +54,11 @@ runner with GraalVM 25.
 `application.properties` sets:
 
 ```text
-quarkus.package.output-name=codex-usage-dashboard
+quarkus.package.output-name=ccc-usage-dashboard
 quarkus.package.jar.add-runner-suffix=false
 ```
 
-so the intended release artifact name is `target/codex-usage-dashboard`.
+so the intended release artifact name is `target/ccc-usage-dashboard`.
 
 ## Local Verification
 
@@ -71,7 +71,7 @@ curl -s http://127.0.0.1:4318/health
 Dashboard:
 
 ```sh
-curl -s -o /tmp/codex-usage-dashboard.html -w '%{http_code}\n' \
+curl -s -o /tmp/ccc-usage-dashboard.html -w '%{http_code}\n' \
   'http://127.0.0.1:4318/?range=6h&grain=5m'
 ```
 

@@ -5,11 +5,11 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>cero.ninja.agent</groupId>
-  <artifactId>codex-usage-dashboard</artifactId>
+  <artifactId>ccc-usage-dashboard</artifactId>
   <version>0.2.0</version>
   <packaging>quarkus</packaging>
-  <name>codex-usage-dashboard</name>
-  <description>Single-binary local dashboard for Codex usage, credit estimates, and attribution.</description>
+  <name>CCC — Codex and Claude Code Usage Dashboard</name>
+  <description>Local usage, cost, quota, and attribution dashboard for Codex and Claude Code.</description>
 
   <licenses>
     <license>

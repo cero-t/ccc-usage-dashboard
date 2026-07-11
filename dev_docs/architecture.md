@@ -1,6 +1,6 @@
 # Architecture
 
-`codex-usage-dashboard` is a local append-oriented pipeline:
+`ccc-usage-dashboard` is a local append-oriented pipeline:
 
 ```text
 Codex OTLP logs / Claude Code OTLP logs
