@@ -4,6 +4,7 @@ import cero.ninja.ccc.db.JdbcClient;
 import cero.ninja.ccc.store.Cursors;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -12,8 +13,8 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.resteasy.reactive.RestResponse;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -72,6 +73,7 @@ public class DashboardApi {
             String lastReceivedAt,
             List<UsageLatest> usage) {}
 
+    @RegisterForReflection
     public record UsageLatest(
             String window,
             String planType,
@@ -80,6 +82,7 @@ public class DashboardApi {
             Long resetsAt,
             String sampledAt) {}
 
+    @RegisterForReflection
     public record ModelCredits(
             String rateModel,
             long n,
@@ -87,11 +90,13 @@ public class DashboardApi {
             Long outTok,
             double credits) {}
 
+    @RegisterForReflection
     public record CreditPoint(
             String bucket,
             double credits,
             long n) {}
 
+    @RegisterForReflection
     public record RecentEvent(
             long id,
             String ts,
@@ -115,6 +120,7 @@ public class DashboardApi {
             String serviceTier,
             String errorMessage) {}
 
+    @RegisterForReflection
     public record ErrorEvent(
             long id,
             String ts,
@@ -133,15 +139,18 @@ public class DashboardApi {
             String receivedAt,
             JsonNode record) {}
 
+    @RegisterForReflection
     public record UsagePoint(
             String sampledAt,
             Double usedPercent) {}
 
+    @RegisterForReflection
     public record TriggerCredits(
             String trigger,
             long n,
             double credits) {}
 
+    @RegisterForReflection
     public record ModelTriggerCredits(
             String rateModel,
             String trigger,
@@ -149,11 +158,13 @@ public class DashboardApi {
             double credits) {}
 
     /** One (time-bucket, series-key, credits) cell for stacked time-series charts. */
+    @RegisterForReflection
     public record SeriesPoint(
             String bucket,
             String series,
             double credits) {}
 
+    @RegisterForReflection
     public record CostByModel(
             String rateModel,
             long n,
@@ -161,43 +172,51 @@ public class DashboardApi {
             Long outTok,
             double costUsd) {}
 
+    @RegisterForReflection
     public record CostByTrigger(
             String trigger,
             long n,
             double costUsd) {}
 
+    @RegisterForReflection
     public record CostByModelTrigger(
             String rateModel,
             String trigger,
             long n,
             double costUsd) {}
 
+    @RegisterForReflection
     public record TokenByModel(
             String rateModel,
             long n,
             long tokens) {}
 
+    @RegisterForReflection
     public record TokenByTrigger(
             String trigger,
             long n,
             long tokens) {}
 
+    @RegisterForReflection
     public record TokenByModelTrigger(
             String rateModel,
             String trigger,
             long n,
             long tokens) {}
 
+    @RegisterForReflection
     public record CostSeriesPoint(
             String bucket,
             String series,
             double costUsd) {}
 
+    @RegisterForReflection
     public record TokenSeriesPoint(
             String bucket,
             String series,
             long tokens) {}
 
+    @RegisterForReflection
     public record ConversationUsage(
             String sourceTool,
             String lastTs,
@@ -552,7 +571,7 @@ public class DashboardApi {
      */
     @GET
     @Path("/events/{id}/raw")
-    public Response eventRaw(@PathParam("id") long id) {
+    public RestResponse<RawEvent> eventRaw(@PathParam("id") long id) {
         var found = db.sql("""
                 SELECT a.id                                   AS id,
                        a.source_log_id                        AS source_log_id,
@@ -574,10 +593,9 @@ public class DashboardApi {
                         parseJsonLenient(rs.getString("record_json"))))
                 .optional();
         if (found.isEmpty()) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(Map.of("error", "event " + id + " not found")).build();
+            return RestResponse.notFound();
         }
-        return Response.ok(found.get()).build();
+        return RestResponse.ok(found.get());
     }
 
     /** Parse stored JSON to a node; if it somehow isn't valid JSON, wrap it as a string node. */

@@ -7,6 +7,7 @@ import cero.ninja.ccc.db.JdbcClient;
 import cero.ninja.ccc.store.Cursors;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -541,6 +542,7 @@ public class AnnotateJob {
         }
     }
 
+    @RegisterForReflection
     public record RawRow(long id, String recordJson) {}
 
     private final class CodexConnections implements AutoCloseable {
