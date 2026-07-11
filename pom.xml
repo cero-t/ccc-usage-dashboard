@@ -8,7 +8,7 @@
   <artifactId>ccc-usage-dashboard</artifactId>
   <version>0.2.0</version>
   <packaging>quarkus</packaging>
-  <name>CCC — Codex and Claude Code Usage Dashboard</name>
+  <name>ccc-usage-dashboard</name>
   <description>Local usage, cost, quota, and attribution dashboard for Codex and Claude Code.</description>
 
   <licenses>

@@ -1,8 +1,8 @@
-# CCC — Codex and Claude Code Usage Dashboard
+# ccc-usage-dashboard
 
 [English](README.md) | **日本語**
 
-CCC は、Codex と Claude Code の利用状況、コスト、利用枠、利用主体(trigger)をローカルで確認できる、単一バイナリのダッシュボードです。
+**CCC (Codex and Claude Code) Usage Dashboard** は、Codex と Claude Code の利用状況、コスト、利用枠、利用主体(trigger)をローカルで確認できる、単一バイナリのダッシュボードです。
 
 ダッシュボード上では Codex / Claude Code を別タブで表示し、利用履歴、トークン数、USD コスト推定、利用主体の内訳を確認できます。Codex の USD コストは 1000 credits = $40 として概算し、Claude Code の USD コストは Claude Code テレメトリと Claude API の料金表から計算します。
 

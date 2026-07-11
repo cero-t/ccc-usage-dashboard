@@ -13,14 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductIdentityTest {
 
-    private static final String DISPLAY_NAME = "CCC — Codex and Claude Code Usage Dashboard";
+    private static final String PRODUCT_NAME = "ccc-usage-dashboard";
+    private static final String DISPLAY_NAME = "CCC (Codex and Claude Code) Usage Dashboard";
 
     @Test
     void exposesThePublicProductIdentity() throws IOException {
         String page = resource("/META-INF/resources/index.html");
 
-        assertTrue(page.contains("<title>" + DISPLAY_NAME + "</title>"));
-        assertTrue(page.contains(">" + DISPLAY_NAME + "</h1>"));
+        assertTrue(page.contains("<title>" + PRODUCT_NAME + " — " + DISPLAY_NAME + "</title>"));
+        assertTrue(page.contains(">" + PRODUCT_NAME + "</h1>"));
+        assertTrue(page.contains(DISPLAY_NAME + " — local usage, cost, quota, and attribution."));
         assertEquals(Map.of("status", "ok", "service", "ccc-usage-dashboard"),
                 new HealthResource().health());
     }

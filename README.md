@@ -1,9 +1,9 @@
-# CCC — Codex and Claude Code Usage Dashboard
+# ccc-usage-dashboard
 
 **English** | [日本語](README.ja.md)
 
-CCC is a local, single-binary usage, cost, quota, and attribution dashboard for
-Codex and Claude Code.
+**CCC (Codex and Claude Code) Usage Dashboard** is a local, single-binary usage,
+cost, quota, and attribution dashboard for Codex and Claude Code.
 
 It shows Codex and Claude Code on separate dashboard tabs, with usage history,
 token totals, estimated USD cost, and attribution breakdowns. Codex USD cost is
