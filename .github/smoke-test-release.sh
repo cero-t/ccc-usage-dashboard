@@ -172,6 +172,26 @@ if ! jq -e \
   exit 1
 fi
 
+summary_response=$(curl --fail --silent --show-error \
+  "http://127.0.0.1:${http_port}/api/summary?source=codex&range=6h")
+if ! jq -e \
+    '.totalCredits == 0
+      and .totalCostUsd == 0
+      and .totalInputTokens == 0
+      and .totalCachedInputTokens == 0
+      and .totalOutputTokens == 0
+      and .totalEvents == 0
+      and .eventsWithCredits == 0
+      and .eventsWithCost == 0
+      and .rawRecords == 0
+      and .annotateCursor == 0
+      and .backlog == 0
+      and (.usage | type == "array")' \
+    <<< "$summary_response" >/dev/null; then
+  echo "Unexpected summary response: $summary_response" >&2
+  exit 1
+fi
+
 database="$application_home/data/ccc-usage-dashboard.sqlite"
 if [[ ! -f "$database" ]]; then
   echo "The packaged process did not initialize the expected database: $database" >&2

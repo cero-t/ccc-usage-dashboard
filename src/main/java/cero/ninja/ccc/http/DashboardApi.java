@@ -69,6 +69,7 @@ public class DashboardApi {
             String lastReceivedAt,
             List<UsageLatest> usage) {}
 
+    @RegisterForReflection
     private record SummaryTotals(
             double totalCredits,
             double totalCostUsd,
@@ -79,6 +80,7 @@ public class DashboardApi {
             long eventsWithCredits,
             long eventsWithCost) {}
 
+    @RegisterForReflection
     private record RawSummary(
             long rawRecords,
             long annotateCursor,
