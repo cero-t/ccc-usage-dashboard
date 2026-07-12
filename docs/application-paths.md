@@ -30,8 +30,6 @@ Installed application settings use Quarkus's standard properties format. Create
 a default, and add only the properties you need. Quarkus parses this file;
 ccc-usage-dashboard does not implement a separate configuration-file parser.
 
-The complete application home can be moved with a process environment variable:
-
 The complete application home can be moved with:
 
 ```sh

@@ -59,6 +59,18 @@ class ApplicationBootstrapTest {
     }
 
     @Test
+    void legacyHomeEnvironmentVariableRemainsSupported() {
+        Path legacyHome = temporaryDirectory.resolve("legacy-home");
+        Map<String, String> environment = Map.of(
+                "CODEX_USAGE_DASHBOARD_HOME", legacyHome.toString());
+
+        ApplicationBootstrap.Result result = prepare(
+                environment, new Properties(), temporaryDirectory.resolve("work"), temporaryDirectory.resolve("home"));
+
+        assertEquals(legacyHome.toAbsolutePath(), result.applicationHome());
+    }
+
+    @Test
     void reportsTheStableApplicationPropertiesPath() {
         Path userHome = temporaryDirectory.resolve("home");
         Path workingDirectory = temporaryDirectory.resolve("work");
