@@ -8,32 +8,34 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProductIdentityTest {
 
-    private static final String PRODUCT_NAME = "ccc-usage-dashboard";
-    private static final String DISPLAY_NAME = "CCC (Codex and Claude Code) Usage Dashboard";
+    private static final String APPLICATION_NAME = "ccc-usage-dashboard";
+    private static final String DESCRIPTION = "CCC (Codex and Claude Code) Usage Dashboard";
 
     @Test
     void exposesThePublicProductIdentity() throws IOException {
         String page = resource("/META-INF/resources/index.html");
 
-        assertTrue(page.contains("<title>" + PRODUCT_NAME + " — " + DISPLAY_NAME + "</title>"));
-        assertTrue(page.contains(">" + PRODUCT_NAME + "</h1>"));
-        assertTrue(page.contains(DISPLAY_NAME + " — local usage, cost, quota, and attribution."));
+        assertTrue(page.contains("<title>" + APPLICATION_NAME + " — " + DESCRIPTION + "</title>"));
+        assertTrue(page.contains(">" + APPLICATION_NAME + "</h1>"));
+        assertTrue(page.contains("<span class=\"sub\">" + DESCRIPTION + "</span>"));
         assertEquals(Map.of("status", "ok", "service", "ccc-usage-dashboard"),
                 new HealthResource().health());
     }
 
     @Test
-    void usesTheNewArtifactNameWhileRetainingLegacyStateAndConfiguration() throws IOException {
+    void usesTheNewArtifactNameAndStablePathBootstrap() throws IOException {
         String properties = resource("/application.properties");
 
         assertTrue(properties.contains("quarkus.package.output-name=ccc-usage-dashboard"));
-        assertTrue(properties.contains("jdbc:sqlite:data/codex-usage-dashboard.sqlite"));
-        assertTrue(properties.contains("codex-usage-dashboard.codex.enabled=true"));
+        assertTrue(properties.contains("quarkus.package.main-class=cero.ninja.ccc.bootstrap.CccUsageDashboardMain"));
+        assertFalse(properties.contains("jdbc:sqlite:data/codex-usage-dashboard.sqlite"));
+        assertTrue(properties.contains("ccc-usage-dashboard.codex.enabled="));
     }
 
     private String resource(String path) throws IOException {

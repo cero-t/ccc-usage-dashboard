@@ -14,10 +14,11 @@ Create a LaunchAgent at
 `~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist`. Replace
 `YOUR_USERNAME` and the paths to match your install.
 
-When upgrading an existing installation, you may keep its current plist label
-and working directory. Point `ProgramArguments` at the new
-`ccc-usage-dashboard` executable, and keep the working directory unchanged so
-the existing `data/codex-usage-dashboard.sqlite` remains in use.
+When upgrading an existing installation, keep its old working directory for the
+first v0.3 start. If that directory contains
+`data/codex-usage-dashboard.sqlite`, ccc-usage-dashboard copies it to the stable per-user data
+directory without deleting the original. Later starts use the stable path and
+no longer depend on `WorkingDirectory`.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -40,15 +41,15 @@ the existing `data/codex-usage-dashboard.sqlite` remains in use.
   <key>ProcessType</key>
   <string>Background</string>
   <key>StandardOutPath</key>
-  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.out.log</string>
+  <string>/Users/YOUR_USERNAME/.ccc-usage-dashboard/logs/dashboard.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.err.log</string>
+  <string>/Users/YOUR_USERNAME/.ccc-usage-dashboard/logs/dashboard.err.log</string>
 </dict>
 </plist>
 ```
 
-- `WorkingDirectory` is where `data/codex-usage-dashboard.sqlite` and `logs/` are
-  created, so point it at a stable location.
+- `WorkingDirectory` is used only to discover a pre-v0.3 legacy database during
+  migration. New data and logs live under `~/.ccc-usage-dashboard` by default.
 - `RunAtLoad` starts it at login; `KeepAlive` restarts it if it exits.
 
 If you built from source (JVM package) instead of using the prebuilt binary, swap
@@ -66,7 +67,7 @@ If you built from source (JVM package) instead of using the prebuilt binary, swa
 Load and start it:
 
 ```sh
-mkdir -p ~/ccc-usage-dashboard/logs
+mkdir -p ~/.ccc-usage-dashboard/logs
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist
 launchctl kickstart -k gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
@@ -83,6 +84,9 @@ To stop or remove it:
 ```sh
 launchctl bootout gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
+
+See [Application paths and legacy migration](application-paths.md) before
+changing storage paths or removing the retained legacy database.
 
 > Linux users can achieve the same with a `systemd --user` unit (`ExecStart` the
 > binary or `java -jar ...`, `Restart=always`, `WantedBy=default.target`).

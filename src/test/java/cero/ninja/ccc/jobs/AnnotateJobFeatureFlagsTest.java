@@ -234,8 +234,8 @@ class AnnotateJobFeatureFlagsTest {
                     "jdbc:sqlite:target/annotate-job-feature-flags-test.sqlite?journal_mode=WAL&busy_timeout=10000",
                     "quarkus.http.test-port", "0",
                     "quarkus.scheduler.enabled", "false",
-                    "codex-usage-dashboard.codex.enabled", "false",
-                    "codex-usage-dashboard.claude.enabled", "true");
+                    "ccc-usage-dashboard.codex.enabled", "false",
+                    "ccc-usage-dashboard.claude.enabled", "true");
         }
     }
 }

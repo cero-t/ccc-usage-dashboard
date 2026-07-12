@@ -46,13 +46,13 @@ public class UsageJob {
     @ConfigProperty(name = "codex.bin", defaultValue = "codex")
     String codexBin;
 
-    @ConfigProperty(name = "codex-usage-dashboard.codex.enabled", defaultValue = "true")
+    @ConfigProperty(name = "ccc-usage-dashboard.codex.enabled", defaultValue = "true")
     boolean codexEnabled;
 
     @ConfigProperty(name = "codex.usage.timeout-ms", defaultValue = "15000")
     long timeoutMs;
 
-    @Scheduled(every = "{codex-usage-dashboard.usage.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(every = "{ccc-usage-dashboard.usage.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void run() {
         if (!codexEnabled) {
             LOG.debug("Codex support disabled; skipping usage poll");
@@ -107,7 +107,7 @@ public class UsageJob {
                         "params", Map.of(
                                 "clientInfo", Map.of(
                                         "name", "ccc-usage-dashboard",
-                                        "title", "CCC (Codex and Claude Code) Usage Dashboard",
+                                        "title", "ccc-usage-dashboard",
                                         "version", "0.1.0"),
                                 "capabilities", Map.of("experimentalApi", true))),
                 Map.of("method", "initialized", "params", Map.of()),

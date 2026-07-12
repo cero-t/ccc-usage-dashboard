@@ -46,7 +46,7 @@ public class RawLogStore {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "codex-usage-dashboard.ingest.drop-event-kinds", defaultValue = "^response\\..+\\.delta$")
+    @ConfigProperty(name = "ccc-usage-dashboard.ingest.drop-event-kinds", defaultValue = "^response\\..+\\.delta$")
     String dropEventKinds;
 
     private Pattern dropEventKindsPattern;

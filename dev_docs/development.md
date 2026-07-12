@@ -29,6 +29,13 @@ Run in Quarkus dev mode:
 ./mvnw quarkus:dev
 ```
 
+Dev mode uses the same `~/.ccc-usage-dashboard` defaults as the packaged app.
+To isolate development state, select a repository-local home explicitly:
+
+```sh
+CCC_USAGE_DASHBOARD_HOME="$(pwd)/target/dev-home" ./mvnw quarkus:dev
+```
+
 Package JVM artifact:
 
 ```sh
@@ -152,6 +159,11 @@ exporters:
 The exporter appends `/v1/logs` automatically. gzip is supported.
 
 ## Database Replay
+
+The default owned database is
+`~/.ccc-usage-dashboard/data/ccc-usage-dashboard.sqlite`. Use the path selected
+by `CCC_USAGE_DASHBOARD_HOME`, `CCC_USAGE_DASHBOARD_DATABASE_PATH`, or
+`QUARKUS_DATASOURCE_JDBC_URL` when an override is active.
 
 Raw records are the short-term source of truth. To replay derived rows after
 changing annotation logic:

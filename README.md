@@ -31,8 +31,8 @@ The screenshots below show a 12-hour range at 5-minute grain.
   [Configure Claude Code OTLP](#configure-claude-code-otlp))
 
 The dashboard can run with only one tool enabled. Set
-`CODEX_USAGE_DASHBOARD_CODEX_ENABLED=false` on machines that do not use Codex, or
-`CODEX_USAGE_DASHBOARD_CLAUDE_ENABLED=false` on machines that do not use Claude
+`CCC_USAGE_DASHBOARD_CODEX_ENABLED=false` on machines that do not use Codex, or
+`CCC_USAGE_DASHBOARD_CLAUDE_ENABLED=false` on machines that do not use Claude
 Code.
 
 ## Quick Start
@@ -80,13 +80,14 @@ By default the app listens only on localhost:
 The local database is created at:
 
 ```text
-data/codex-usage-dashboard.sqlite
+~/.ccc-usage-dashboard/data/ccc-usage-dashboard.sqlite
 ```
 
-relative to the directory where you run the binary.
-
-The legacy database filename and `CODEX_USAGE_DASHBOARD_*` environment variable
-prefix are intentionally retained for compatibility during the product rename.
+The config file is `~/.ccc-usage-dashboard/config/application.properties`, and logs are written under
+`~/.ccc-usage-dashboard/logs/`. On the first v0.3 start, an existing
+`./data/codex-usage-dashboard.sqlite` is copied safely when the new database does
+not exist. See [Application paths and legacy migration](docs/application-paths.md)
+for precedence, overrides, backup, and rollback details.
 
 ## Configure Codex OTLP
 
@@ -153,13 +154,12 @@ Codex and Claude Code can point at it directly. If you already run an
 keep your tools pointed at the collector, fan out a copy to this dashboard, and
 move the dashboard off the standard ports.
 
-Quarkus reads a `.env` file from the working directory, so put the overrides
-there:
+Put persistent overrides in `~/.ccc-usage-dashboard/config/application.properties`:
 
-```sh
-# .env
-QUARKUS_GRPC_SERVER_PORT=14317
-QUARKUS_HTTP_PORT=14318
+```properties
+# ~/.ccc-usage-dashboard/config/application.properties
+quarkus.grpc.server.port=14317
+quarkus.http.port=14318
 ```
 
 Then have the collector send OTLP/HTTP protobuf to `http://127.0.0.1:14318/v1/logs`
@@ -190,46 +190,53 @@ instead.
 
 ## Configuration
 
-Quarkus reads a `.env` file from the working directory. See
-[`.env.example`](.env.example) for copyable defaults. Useful environment
-variables:
+The installed application's config file is
+`~/.ccc-usage-dashboard/config/application.properties`. Create it when you need
+to override a default. See
+[Application paths and legacy migration](docs/application-paths.md) for the full
+precedence and migration rules. Useful properties:
 
-```sh
+```properties
 # Tool-specific ingestion flags
-CODEX_USAGE_DASHBOARD_CODEX_ENABLED=true
-CODEX_USAGE_DASHBOARD_CLAUDE_ENABLED=true
+ccc-usage-dashboard.codex.enabled=true
+ccc-usage-dashboard.claude.enabled=true
 
 # Ports / bind addresses
-QUARKUS_HTTP_HOST=127.0.0.1
-QUARKUS_HTTP_PORT=4318
-QUARKUS_GRPC_SERVER_HOST=127.0.0.1
-QUARKUS_GRPC_SERVER_PORT=4317
+quarkus.http.host=127.0.0.1
+quarkus.http.port=4318
+quarkus.grpc.server.host=127.0.0.1
+quarkus.grpc.server.port=4317
 
-# Local storage
-QUARKUS_DATASOURCE_JDBC_URL='jdbc:sqlite:data/codex-usage-dashboard.sqlite?journal_mode=WAL&busy_timeout=10000'
+# Optional custom database
+quarkus.datasource.jdbc.url=jdbc:sqlite:/absolute/path/custom.sqlite?journal_mode=WAL&busy_timeout=10000
 
 # Local telemetry retention
-CODEX_USAGE_DASHBOARD_RETENTION_EVERY=1h
-CODEX_USAGE_DASHBOARD_RETENTION_OTEL_LOG_RECORDS=14d
-CODEX_USAGE_DASHBOARD_RETENTION_ANNOTATED_EVENTS=365d
-CODEX_USAGE_DASHBOARD_RETENTION_USAGE_SAMPLES=365d
+ccc-usage-dashboard.retention.every=1h
+ccc-usage-dashboard.retention.otel-log-records=14d
+ccc-usage-dashboard.retention.annotated-events=365d
+ccc-usage-dashboard.retention.usage-samples=365d
 
 # Codex local data directory
-CODEX_DB_DIR="$HOME/.codex"
-CODEX_BIN=codex
+codex.db.dir=/Users/you/.codex
+codex.bin=codex
 
 # Receive-time drop filter for noisy OTLP log records
-CODEX_USAGE_DASHBOARD_INGEST_DROP_EVENT_KINDS='^response[.].+[.]delta$'
+ccc-usage-dashboard.ingest.drop-event-kinds=^response\\..+\\.delta$
 
 # Advanced polling / batch tuning
-CODEX_USAGE_DASHBOARD_ANNOTATE_EVERY=60s
-CODEX_USAGE_DASHBOARD_ANNOTATE_BATCH_SIZE=500
-CODEX_USAGE_DASHBOARD_USAGE_EVERY=60s
+ccc-usage-dashboard.annotate.every=60s
+ccc-usage-dashboard.annotate.batch-size=500
+ccc-usage-dashboard.usage.every=60s
 ```
 
-Set `CODEX_USAGE_DASHBOARD_CODEX_ENABLED=false` on machines without Codex. This
+Every property can still be overridden with its Quarkus/MicroProfile environment
+variable form. Existing `CODEX_USAGE_DASHBOARD_*` names remain supported during
+the v0.3 transition; the corresponding `CCC_USAGE_DASHBOARD_*` name wins when
+both are present.
+
+Set `CCC_USAGE_DASHBOARD_CODEX_ENABLED=false` on machines without Codex. This
 ignores Codex OTLP logs and skips Codex usage polling, so the app will not try
-to launch `codex`. Set `CODEX_USAGE_DASHBOARD_CLAUDE_ENABLED=false` to ignore
+to launch `codex`. Set `CCC_USAGE_DASHBOARD_CLAUDE_ENABLED=false` to ignore
 Claude Code OTLP logs. Disabled tools are also hidden from the dashboard tool
 switcher.
 
@@ -252,7 +259,7 @@ may reuse freed pages without immediately shrinking the database file; run
 By default, receive-time ingestion drops high-volume Codex streaming delta records
 whose `event.kind` matches `^response[.].+[.]delta$`. Those rows do not carry token
 usage and can be much noisier than completed request records. Set
-`CODEX_USAGE_DASHBOARD_INGEST_DROP_EVENT_KINDS` to an empty value if you need to
+`ccc-usage-dashboard.ingest.drop-event-kinds` to an empty value if you need to
 store every received OTLP log record.
 
 ## OTLP Support

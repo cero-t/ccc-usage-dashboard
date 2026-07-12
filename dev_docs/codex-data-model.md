@@ -9,7 +9,7 @@ Validated locally on 2026-06-09 against:
 - `~/.codex/sqlite/logs_2.sqlite`
 - `~/.codex/sqlite/state_5.sqlite`
 - legacy layout under `~/.codex/`
-- `data/codex-usage-dashboard.sqlite`
+- `~/.ccc-usage-dashboard/data/ccc-usage-dashboard.sqlite`
 
 ## OTLP Completion Records
 

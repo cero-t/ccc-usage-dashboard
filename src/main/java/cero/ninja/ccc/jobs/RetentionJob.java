@@ -56,15 +56,15 @@ public class RetentionJob {
     @Inject
     Cursors cursors;
 
-    @ConfigProperty(name = "codex-usage-dashboard.retention.otel-log-records",
+    @ConfigProperty(name = "ccc-usage-dashboard.retention.otel-log-records",
             defaultValue = DEFAULT_OTEL_LOG_RECORDS_RETENTION)
     String otelLogRecordsRetentionConfig;
 
-    @ConfigProperty(name = "codex-usage-dashboard.retention.annotated-events",
+    @ConfigProperty(name = "ccc-usage-dashboard.retention.annotated-events",
             defaultValue = DEFAULT_ANNOTATED_EVENTS_RETENTION)
     String annotatedEventsRetentionConfig;
 
-    @ConfigProperty(name = "codex-usage-dashboard.retention.usage-samples",
+    @ConfigProperty(name = "ccc-usage-dashboard.retention.usage-samples",
             defaultValue = DEFAULT_USAGE_SAMPLES_RETENTION)
     String usageSamplesRetentionConfig;
 
@@ -75,14 +75,14 @@ public class RetentionJob {
     @PostConstruct
     void validateConfig() {
         otelLogRecordsRetention = RetentionWindow.parse(
-                "codex-usage-dashboard.retention.otel-log-records", otelLogRecordsRetentionConfig);
+                "ccc-usage-dashboard.retention.otel-log-records", otelLogRecordsRetentionConfig);
         annotatedEventsRetention = RetentionWindow.parse(
-                "codex-usage-dashboard.retention.annotated-events", annotatedEventsRetentionConfig);
+                "ccc-usage-dashboard.retention.annotated-events", annotatedEventsRetentionConfig);
         usageSamplesRetention = RetentionWindow.parse(
-                "codex-usage-dashboard.retention.usage-samples", usageSamplesRetentionConfig);
+                "ccc-usage-dashboard.retention.usage-samples", usageSamplesRetentionConfig);
     }
 
-    @Scheduled(every = "{codex-usage-dashboard.retention.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(every = "{ccc-usage-dashboard.retention.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void run() {
         CleanupResult deleted = cleanup(Instant.now());
         if (deleted.total() > 0) {

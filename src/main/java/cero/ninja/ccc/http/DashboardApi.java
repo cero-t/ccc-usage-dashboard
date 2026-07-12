@@ -24,7 +24,7 @@ import java.util.Map;
 
 /**
  * Read-only JSON API backing the embedded dashboard. Every query reads the local
- * {@code codex-usage-dashboard.sqlite} append-only tables on the fly — no rollup table —
+ * ccc-usage-dashboard SQLite append-only tables on the fly — no rollup table —
  * so the whole surface ports to Go as a set of SQL strings + {@code net/http} handlers.
  *
  * <p>Time grain note: {@code annotated_events.time_unix_nano} is currently 0 for the
@@ -46,10 +46,10 @@ public class DashboardApi {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "codex-usage-dashboard.codex.enabled", defaultValue = "true")
+    @ConfigProperty(name = "ccc-usage-dashboard.codex.enabled", defaultValue = "true")
     boolean codexEnabled;
 
-    @ConfigProperty(name = "codex-usage-dashboard.claude.enabled", defaultValue = "true")
+    @ConfigProperty(name = "ccc-usage-dashboard.claude.enabled", defaultValue = "true")
     boolean claudeEnabled;
 
     // ---- DTOs (mapped from result-set column labels by RecordMapper) ----

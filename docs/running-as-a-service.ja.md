@@ -8,7 +8,7 @@
 
 `~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist` にLaunchAgentを作成します。`YOUR_USERNAME`と各パスは、実際のインストール先に合わせて置き換えてください。
 
-既存環境をアップグレードする場合、現在の plist label と作業ディレクトリはそのまま利用できます。`ProgramArguments` だけを新しい `ccc-usage-dashboard` 実行ファイルへ向け、既存の `data/codex-usage-dashboard.sqlite` を引き続き利用できるよう、作業ディレクトリは変更しないでください。
+既存環境をアップグレードする場合、v0.3 の初回起動までは以前の作業ディレクトリを維持してください。そのディレクトリに `data/codex-usage-dashboard.sqlite` があれば、ccc-usage-dashboard は旧ファイルを削除せず、ユーザーごとの固定データディレクトリへコピーします。2回目以降は固定パスを使うため、`WorkingDirectory` に依存しません。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -31,14 +31,14 @@
   <key>ProcessType</key>
   <string>Background</string>
   <key>StandardOutPath</key>
-  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.out.log</string>
+  <string>/Users/YOUR_USERNAME/.ccc-usage-dashboard/logs/dashboard.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/YOUR_USERNAME/ccc-usage-dashboard/logs/dashboard.err.log</string>
+  <string>/Users/YOUR_USERNAME/.ccc-usage-dashboard/logs/dashboard.err.log</string>
 </dict>
 </plist>
 ```
 
-- `WorkingDirectory`を基準として`data/codex-usage-dashboard.sqlite`と`logs/`が作成されるため、安定した場所を指定してください。
+- `WorkingDirectory` は v0.3 より前の旧DBを移行時に見つけるためだけに使います。新しいデータとログの既定値は `~/.ccc-usage-dashboard` 以下です。
 - `RunAtLoad`によりログイン時に起動し、`KeepAlive`によりプロセス終了時に再起動します。
 
 配布済みバイナリではなく、ソースからJVMパッケージをビルドした場合は、`ProgramArguments`をJDK 25以降と実行可能JARのパスに置き換えます。
@@ -55,7 +55,7 @@
 LaunchAgentを読み込み、起動します。
 
 ```sh
-mkdir -p ~/ccc-usage-dashboard/logs
+mkdir -p ~/.ccc-usage-dashboard/logs
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.ccc-usage-dashboard.plist
 launchctl kickstart -k gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
@@ -72,6 +72,8 @@ launchctl print gui/$(id -u)/com.example.ccc-usage-dashboard | grep -E "state =|
 ```sh
 launchctl bootout gui/$(id -u)/com.example.ccc-usage-dashboard
 ```
+
+保存先を変更したり、残してある旧DBを削除したりする前に、[アプリケーションパスと旧DBの移行](application-paths.ja.md)を確認してください。
 
 > Linuxでは、`systemd --user`ユニットでも同様に常駐化できます。`ExecStart`にバイナリまたは`java -jar ...`を指定し、`Restart=always`と`WantedBy=default.target`を設定します。
 

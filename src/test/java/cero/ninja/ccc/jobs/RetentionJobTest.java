@@ -139,9 +139,9 @@ class RetentionJobTest {
                     "jdbc:sqlite:target/retention-job-test.sqlite?journal_mode=WAL&busy_timeout=10000",
                     "quarkus.http.test-port", "0",
                     "quarkus.scheduler.enabled", "false",
-                    "codex-usage-dashboard.retention.otel-log-records", "1d",
-                    "codex-usage-dashboard.retention.annotated-events", "1d",
-                    "codex-usage-dashboard.retention.usage-samples", "1d");
+                    "ccc-usage-dashboard.retention.otel-log-records", "1d",
+                    "ccc-usage-dashboard.retention.annotated-events", "1d",
+                    "ccc-usage-dashboard.retention.usage-samples", "1d");
         }
     }
 }

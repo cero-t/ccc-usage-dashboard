@@ -214,7 +214,7 @@ class AnnotateJobCodexDbPathsTest {
                     "jdbc:sqlite:target/annotate-job-codex-db-paths-test.sqlite?journal_mode=WAL&busy_timeout=10000",
                     "quarkus.http.test-port", "0",
                     "quarkus.scheduler.enabled", "false",
-                    "codex-usage-dashboard.codex.enabled", "true",
+                    "ccc-usage-dashboard.codex.enabled", "true",
                     "codex.db.dir", CODEX_DIR.toString(),
                     "codex.open.retries", "0");
         }

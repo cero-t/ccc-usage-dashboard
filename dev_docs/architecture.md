@@ -53,8 +53,8 @@ and keeps rows that match either tool's usage/error shape.
 
 Tool support is controlled independently:
 
-- `codex-usage-dashboard.codex.enabled=true`
-- `codex-usage-dashboard.claude.enabled=true`
+- `ccc-usage-dashboard.codex.enabled=true`
+- `ccc-usage-dashboard.claude.enabled=true`
 
 Disabled tool rows are skipped and the forward cursor still advances.
 The static dashboard reads `/api/config` and hides disabled source tabs.
@@ -110,7 +110,7 @@ account/rateLimits/read
 
 Each returned primary/secondary usage window is appended to `usage_samples`.
 
-The usage job also obeys `codex-usage-dashboard.codex.enabled`; when Codex is
+The usage job also obeys `ccc-usage-dashboard.codex.enabled`; when Codex is
 disabled, it does not launch the `codex` binary.
 
 ## Tables
@@ -118,7 +118,7 @@ disabled, it does not launch the `codex` binary.
 Owned database:
 
 ```text
-data/codex-usage-dashboard.sqlite
+~/.ccc-usage-dashboard/data/ccc-usage-dashboard.sqlite
 ```
 
 Tables:
@@ -131,15 +131,15 @@ Tables:
 
 Retention:
 
-- `codex-usage-dashboard.retention.otel-log-records=14d` deletes old raw OTLP
+- `ccc-usage-dashboard.retention.otel-log-records=14d` deletes old raw OTLP
   rows by `received_at`, but only when `id <= cursor['annotate_log_id']`.
   Unprocessed raw backlog is never deleted by retention.
-- `codex-usage-dashboard.retention.annotated-events=365d` deletes old derived
+- `ccc-usage-dashboard.retention.annotated-events=365d` deletes old derived
   Codex and Claude Code rows by event time, falling back to `annotated_at` when
   `time_unix_nano` is missing or zero.
-- `codex-usage-dashboard.retention.usage-samples=365d` deletes old Codex
+- `ccc-usage-dashboard.retention.usage-samples=365d` deletes old Codex
   rate-limit snapshots by `sampled_at`.
-- `codex-usage-dashboard.retention.every=1h` controls the cleanup cadence. Any
+- `ccc-usage-dashboard.retention.every=1h` controls the cleanup cadence. Any
   table retention value can be `0` or `disabled` to keep that table indefinitely.
 
 Important indexes:

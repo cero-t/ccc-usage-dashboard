@@ -109,16 +109,16 @@ public class AnnotateJob {
     @Inject
     ClaudeRateCard claudeRateCard;
 
-    @ConfigProperty(name = "codex-usage-dashboard.annotate.batch-size", defaultValue = "500")
+    @ConfigProperty(name = "ccc-usage-dashboard.annotate.batch-size", defaultValue = "500")
     int batchSize;
 
-    @ConfigProperty(name = "codex-usage-dashboard.codex.enabled", defaultValue = "true")
+    @ConfigProperty(name = "ccc-usage-dashboard.codex.enabled", defaultValue = "true")
     boolean codexEnabled;
 
-    @ConfigProperty(name = "codex-usage-dashboard.claude.enabled", defaultValue = "true")
+    @ConfigProperty(name = "ccc-usage-dashboard.claude.enabled", defaultValue = "true")
     boolean claudeEnabled;
 
-    @Scheduled(every = "{codex-usage-dashboard.annotate.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(every = "{ccc-usage-dashboard.annotate.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void run() {
         long cursor = cursors.getLong(CURSOR, 0);
         List<RawRow> rows = db.sql(SELECT_RAW)

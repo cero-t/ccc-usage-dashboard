@@ -2,6 +2,7 @@ package cero.ninja.ccc.store;
 
 import cero.ninja.ccc.db.JdbcClient;
 import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -11,7 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Creates every table the app owns, on the local {@code codex-usage-dashboard.sqlite}.
+ * Creates every table the app owns in the selected ccc-usage-dashboard SQLite database.
  *
  * <p>The pipeline is append-only and split into three writers that all target
  * this one file:
@@ -230,7 +231,9 @@ public class SchemaInitializer {
     @ConfigProperty(name = "quarkus.datasource.jdbc.url")
     String jdbcUrl;
 
-    void init(@Observes StartupEvent event) {
+    // Quarkus's simple scheduler observes StartupEvent at priority 0. Initialize
+    // a fresh database first so immediate jobs never query tables mid-creation.
+    void init(@Observes @Priority(-1) StartupEvent event) {
         ensureParentDirectoryExists();
         db.sql(RAW_TABLE).update();
         db.sql(ANNOTATED_TABLE).update();
