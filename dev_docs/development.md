@@ -198,6 +198,8 @@ Release flow:
 1. Push the release commit to `main`.
 2. Create and push an annotated version tag, for example
    `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-3. Let the release workflow build the native binary and create a draft GitHub
-   Release with the zip asset attached.
-4. Review the draft release notes and asset, then publish the release manually.
+3. Let the release workflow build, sign, notarize, and smoke-test the macOS
+   artifact.
+4. After validation succeeds, the workflow creates a draft GitHub Release with
+   the zip and SHA-256 digest attached.
+5. Review the draft release notes and asset, then publish the release manually.

@@ -14,6 +14,7 @@ import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplicationBootstrapTest {
@@ -47,27 +48,51 @@ class ApplicationBootstrapTest {
     }
 
     @Test
-    void newHomeEnvironmentVariableWinsOverLegacyName() {
+    void newPathEnvironmentVariablesWinOverLegacyNames() {
         Map<String, String> environment = new HashMap<>();
         environment.put("CCC_USAGE_DASHBOARD_HOME", temporaryDirectory.resolve("new-home").toString());
         environment.put("CODEX_USAGE_DASHBOARD_HOME", temporaryDirectory.resolve("legacy-home").toString());
+        environment.put("CCC_USAGE_DASHBOARD_CONFIG_FILE", temporaryDirectory.resolve("new-config.properties").toString());
+        environment.put("CODEX_USAGE_DASHBOARD_CONFIG_FILE", temporaryDirectory.resolve("legacy-config.properties").toString());
+        environment.put("CCC_USAGE_DASHBOARD_DATA_DIR", temporaryDirectory.resolve("new-data").toString());
+        environment.put("CODEX_USAGE_DASHBOARD_DATA_DIR", temporaryDirectory.resolve("legacy-data").toString());
+        environment.put("CCC_USAGE_DASHBOARD_DATABASE_PATH", temporaryDirectory.resolve("new-db.sqlite").toString());
+        environment.put("CODEX_USAGE_DASHBOARD_DATABASE_PATH", temporaryDirectory.resolve("legacy-db.sqlite").toString());
+        environment.put("CCC_USAGE_DASHBOARD_LOG_DIR", temporaryDirectory.resolve("new-logs").toString());
+        environment.put("CODEX_USAGE_DASHBOARD_LOG_DIR", temporaryDirectory.resolve("legacy-logs").toString());
 
         ApplicationBootstrap.Result result = prepare(
                 environment, new Properties(), temporaryDirectory.resolve("work"), temporaryDirectory.resolve("home"));
 
         assertEquals(temporaryDirectory.resolve("new-home").toAbsolutePath(), result.applicationHome());
+        assertEquals(temporaryDirectory.resolve("new-config.properties").toAbsolutePath(), result.configFile());
+        assertEquals(temporaryDirectory.resolve("new-data").toAbsolutePath(), result.dataDirectory());
+        assertEquals(temporaryDirectory.resolve("new-db.sqlite").toAbsolutePath(), result.database());
+        assertEquals(temporaryDirectory.resolve("new-logs").toAbsolutePath(), result.logDirectory());
     }
 
     @Test
-    void legacyHomeEnvironmentVariableRemainsSupported() {
+    void legacyPathEnvironmentVariablesRemainSupported() {
         Path legacyHome = temporaryDirectory.resolve("legacy-home");
+        Path legacyConfig = temporaryDirectory.resolve("legacy-config.properties");
+        Path legacyData = temporaryDirectory.resolve("legacy-data");
+        Path legacyDatabase = temporaryDirectory.resolve("legacy-db.sqlite");
+        Path legacyLogs = temporaryDirectory.resolve("legacy-logs");
         Map<String, String> environment = Map.of(
-                "CODEX_USAGE_DASHBOARD_HOME", legacyHome.toString());
+                "CODEX_USAGE_DASHBOARD_HOME", legacyHome.toString(),
+                "CODEX_USAGE_DASHBOARD_CONFIG_FILE", legacyConfig.toString(),
+                "CODEX_USAGE_DASHBOARD_DATA_DIR", legacyData.toString(),
+                "CODEX_USAGE_DASHBOARD_DATABASE_PATH", legacyDatabase.toString(),
+                "CODEX_USAGE_DASHBOARD_LOG_DIR", legacyLogs.toString());
 
         ApplicationBootstrap.Result result = prepare(
                 environment, new Properties(), temporaryDirectory.resolve("work"), temporaryDirectory.resolve("home"));
 
         assertEquals(legacyHome.toAbsolutePath(), result.applicationHome());
+        assertEquals(legacyConfig.toAbsolutePath(), result.configFile());
+        assertEquals(legacyData.toAbsolutePath(), result.dataDirectory());
+        assertEquals(legacyDatabase.toAbsolutePath(), result.database());
+        assertEquals(legacyLogs.toAbsolutePath(), result.logDirectory());
     }
 
     @Test
@@ -97,6 +122,28 @@ class ApplicationBootstrapTest {
         assertEquals("jdbc:sqlite:/tmp/selected.sqlite", properties.getProperty("quarkus.datasource.jdbc.url"));
         assertTrue(Files.exists(legacy));
         assertFalse(Files.exists(result.database()));
+    }
+
+    @Test
+    void systemPropertyDatasourceUrlWinsOverEnvironmentAndStableConfiguration() throws Exception {
+        Path workingDirectory = temporaryDirectory.resolve("work-with-all-datasource-settings");
+        Path applicationHome = temporaryDirectory.resolve("app-home");
+        Path configFile = applicationHome.resolve("config/application.properties");
+        Files.createDirectories(configFile.getParent());
+        Files.writeString(configFile, "quarkus.datasource.jdbc.url=jdbc:sqlite:/tmp/from-config.sqlite\n");
+
+        Properties properties = new Properties();
+        properties.setProperty("quarkus.datasource.jdbc.url", "jdbc:sqlite:/tmp/from-system-property.sqlite");
+        Map<String, String> environment = Map.of(
+                "CCC_USAGE_DASHBOARD_HOME", applicationHome.toString(),
+                "QUARKUS_DATASOURCE_JDBC_URL", "jdbc:sqlite:/tmp/from-environment.sqlite");
+
+        ApplicationBootstrap.Result result = prepare(
+                environment, properties, workingDirectory, temporaryDirectory.resolve("home"));
+
+        assertEquals(ApplicationBootstrap.Migration.SKIPPED_EXPLICIT_DATABASE, result.migration());
+        assertEquals("jdbc:sqlite:/tmp/from-system-property.sqlite",
+                properties.getProperty("quarkus.datasource.jdbc.url"));
     }
 
     @Test
@@ -155,6 +202,20 @@ class ApplicationBootstrapTest {
         assertEquals(selectedHome.toAbsolutePath(), result.applicationHome());
         assertEquals(selectedDatabase.toAbsolutePath(), result.database());
         assertTrue(Files.isDirectory(selectedDatabase.getParent()));
+    }
+
+    @Test
+    void rejectsAStateDirectoryThatIsAnExistingFile() throws Exception {
+        Path invalidLogDirectory = temporaryDirectory.resolve("not-a-directory");
+        Files.writeString(invalidLogDirectory, "occupied");
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> prepare(
+                Map.of("CCC_USAGE_DASHBOARD_LOG_DIR", invalidLogDirectory.toString()),
+                new Properties(),
+                temporaryDirectory.resolve("work"),
+                temporaryDirectory.resolve("home")));
+
+        assertTrue(failure.getMessage().contains("Failed to create ccc-usage-dashboard application directories"));
     }
 
     private ApplicationBootstrap.Result prepare(

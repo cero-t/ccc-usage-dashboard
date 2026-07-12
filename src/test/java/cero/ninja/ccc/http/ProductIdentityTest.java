@@ -24,8 +24,13 @@ class ProductIdentityTest {
         assertTrue(page.contains("<title>" + APPLICATION_NAME + " — " + DESCRIPTION + "</title>"));
         assertTrue(page.contains(">" + APPLICATION_NAME + "</h1>"));
         assertTrue(page.contains("<span class=\"sub\">" + DESCRIPTION + "</span>"));
-        assertEquals(Map.of("status", "ok", "service", "ccc-usage-dashboard"),
-                new HealthResource().health());
+        HealthResource health = new HealthResource();
+        health.applicationVersion = "test-version";
+        assertEquals(Map.of(
+                        "status", "ok",
+                        "service", "ccc-usage-dashboard",
+                        "version", "test-version"),
+                health.health());
     }
 
     @Test

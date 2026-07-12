@@ -34,6 +34,27 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: maven
 
+      - name: Verify packaged application version
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_version="$(./mvnw -B -ntp help:evaluate \
+            -Dexpression=project.version \
+            -DforceStdout \
+            -q)"
+          if [[ -z "$project_version" ]]; then
+            echo '::error::Maven did not report a project version.'
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$project_version" ]]; then
+              echo "::error::Tag version $tag_version does not match project version $project_version."
+              exit 1
+            fi
+          fi
+          printf 'PROJECT_VERSION=%s\n' "$project_version" >> "$GITHUB_ENV"
+
       - name: Build native binary
         run: ./mvnw -B -ntp -DskipTests -Dnative package
 
@@ -175,58 +196,21 @@ jobs:
 
       - name: Smoke test packaged artifact
         shell: bash
+        env:
+          SMOKE_LOG_PATH: ${{ runner.temp }}/packaged-smoke.log
+          SMOKE_VERIFY_CODESIGN: "true"
         run: |
           set -euo pipefail
-          smoke_dir="$RUNNER_TEMP/packaged-smoke"
-          smoke_home="$RUNNER_TEMP/smoke-home"
-          smoke_log="$RUNNER_TEMP/smoke.log"
-          smoke_binary="$smoke_dir/ccc-usage-dashboard"
+          .github/smoke-test-release.sh "$ARCHIVE_PATH" "$PROJECT_VERSION"
 
-          rm -rf "$smoke_dir" "$smoke_home"
-          mkdir -p "$smoke_dir" "$smoke_home"
-          ditto -x -k "$ARCHIVE_PATH" "$smoke_dir"
-          test -x "$smoke_binary"
-          codesign --verify --deep --strict --verbose=2 "$smoke_binary"
-
-          CCC_USAGE_DASHBOARD_HOME="$smoke_home" \
-          CODEX_USAGE_DASHBOARD_CODEX_ENABLED=false \
-          CODEX_USAGE_DASHBOARD_CLAUDE_ENABLED=false \
-          QUARKUS_HTTP_PORT=49318 \
-          QUARKUS_GRPC_SERVER_PORT=49317 \
-          QUARKUS_LOG_FILE_ENABLED=false \
-            "$smoke_binary" > "$smoke_log" 2>&1 &
-          smoke_pid=$!
-
-          stop_smoke_process() {
-            if kill -0 "$smoke_pid" 2>/dev/null; then
-              kill "$smoke_pid" 2>/dev/null || true
-              wait "$smoke_pid" 2>/dev/null || true
-            fi
-          }
-          trap stop_smoke_process EXIT
-
-          ready=false
-          for ((attempt = 1; attempt <= 60; attempt++)); do
-            if ! kill -0 "$smoke_pid" 2>/dev/null; then
-              cat "$smoke_log"
-              echo '::error::The packaged binary exited before becoming healthy.'
-              exit 1
-            fi
-            if curl --fail --silent --output /dev/null http://127.0.0.1:49318/health; then
-              ready=true
-              break
-            fi
-            sleep 1
-          done
-
-          if [[ "$ready" != true ]]; then
-            cat "$smoke_log"
-            echo '::error::The packaged binary did not become healthy within 60 seconds.'
-            exit 1
-          fi
-
-          stop_smoke_process
-          trap - EXIT
+      - name: Upload packaged smoke-test log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: packaged-smoke-test-log
+          path: ${{ runner.temp }}/packaged-smoke.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Create SHA-256 digest
         shell: bash
