@@ -6,7 +6,7 @@
 
   <groupId>cero.ninja.ccc</groupId>
   <artifactId>ccc-usage-dashboard</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <packaging>quarkus</packaging>
   <name>ccc-usage-dashboard</name>
   <description>Local usage, cost, quota, and attribution dashboard for Codex and Claude Code.</description>
