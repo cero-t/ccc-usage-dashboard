@@ -48,6 +48,7 @@ class FreshInstallTest {
         assertTrue(hasColumn("annotated_events", "trigger"));
         assertTrue(hasColumn("annotated_events", "cost_usd"));
         assertTrue(indexExists("idx_annotated_events_source_unique"));
+        assertTrue(indexExists("idx_annotated_events_claude_agent_prompt"));
         assertTrue(indexExists("idx_otel_log_records_prompt_id"));
     }
 

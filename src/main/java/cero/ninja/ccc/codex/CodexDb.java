@@ -25,8 +25,9 @@ import java.util.Optional;
  * checkpointing the open can transiently fail with {@code SQLITE_CANTOPEN}
  * ("unable to open database file"). {@code busy_timeout} only covers lock
  * contention <em>after</em> the file is open, not the open handshake, so the
- * open itself is retried a couple of times with a short backoff. The caller
- * treats a final failure as "retry next pass" (cursors are forward-only).
+ * open itself is retried a couple of times with a short backoff. Existing files
+ * that still cannot be opened fail the pass for retry (cursors are forward-only),
+ * while a receiver with no local Codex DB simply runs without enrichment.
  */
 @ApplicationScoped
 public class CodexDb {
@@ -90,7 +91,7 @@ public class CodexDb {
         if (last != null) {
             throw new SQLException("unable to open any Codex DB candidate (db=" + dbName + "): " + last, last);
         }
-        throw new SQLException("no Codex DB candidate exists (db=" + dbName + ")");
+        return List.of();
     }
 
     private static List<String> uniquePaths(List<String> paths) {

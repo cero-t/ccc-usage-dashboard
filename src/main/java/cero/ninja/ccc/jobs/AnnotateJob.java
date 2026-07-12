@@ -91,6 +91,14 @@ public class AnnotateJob {
             LIMIT 1
             """;
 
+    private static final String RECLASSIFY_CLAUDE_AGENT = """
+            UPDATE annotated_events
+            SET trigger = 'user_driven_agent'
+            WHERE source_tool = 'claude'
+              AND trigger = 'agent'
+              AND json_extract(attributes_json, '$."prompt.id"') = :prompt_id
+            """;
+
     @Inject
     JdbcClient db;
 
@@ -279,6 +287,16 @@ public class AnnotateJob {
         String rawEvent = firstNonBlank(optString(attrs, "event.name"), optString(root, "body"));
         String eventName = rawEvent == null ? null : "claude." + rawEvent.replaceFirst("^claude_code\\.", "");
         String requestId = optString(attrs, "request_id");
+        String promptId = optString(attrs, "prompt.id");
+        if (isClaudeUserPrompt(rawEvent) && promptId != null && !promptId.isBlank()) {
+            // A user_prompt can arrive after its agent api_request. Correct any
+            // previously classified row immediately instead of waiting for the
+            // startup backfill, and keep this pass's lookup cache consistent.
+            claudeUserPromptCache.put(promptId, true);
+            db.sql(RECLASSIFY_CLAUDE_AGENT)
+                    .param("prompt_id", promptId)
+                    .update();
+        }
         Long inputTokens = optLong(attrs, "input_tokens");
         Long cacheCreationTokens = optLong(attrs, "cache_creation_tokens");
         Long cacheReadTokens = optLong(attrs, "cache_read_tokens");
@@ -307,7 +325,6 @@ public class AnnotateJob {
         Double costUsd = costs == null ? reportedCostUsd : Double.valueOf(costs.total());
         String querySource = optString(attrs, "query_source");
         String agentName = optString(attrs, "agent.name");
-        String promptId = optString(attrs, "prompt.id");
         String serviceName = optString(resource, "service.name");
 
         return db.sql(INSERT_ANNOTATED)
@@ -364,6 +381,10 @@ public class AnnotateJob {
         }
         String body = optString(root, "body");
         return body != null && (body.startsWith("claude_code.") || body.equals("api_request") || body.equals("api_error"));
+    }
+
+    private static boolean isClaudeUserPrompt(String eventName) {
+        return "user_prompt".equals(eventName) || "claude_code.user_prompt".equals(eventName);
     }
 
     private boolean claudeHasUserPrompt(String promptId, Map<String, Boolean> cache) {

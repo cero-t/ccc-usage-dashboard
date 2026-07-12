@@ -117,6 +117,12 @@ public class SchemaInitializer {
             WHERE request_id IS NOT NULL
             """;
 
+    private static final String ANNOTATED_CLAUDE_AGENT_PROMPT_INDEX = """
+            CREATE INDEX IF NOT EXISTS idx_annotated_events_claude_agent_prompt
+            ON annotated_events(json_extract(attributes_json, '$."prompt.id"'))
+            WHERE source_tool = 'claude' AND trigger = 'agent'
+            """;
+
     private static final String USAGE_TABLE = """
             CREATE TABLE IF NOT EXISTS usage_samples (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -273,6 +279,7 @@ public class SchemaInitializer {
         db.sql(ANNOTATED_EVENT_TIME_INDEX).update();
         db.sql(ANNOTATED_CREDIT_TIME_INDEX).update();
         db.sql(ANNOTATED_REQUEST_INDEX).update();
+        db.sql(ANNOTATED_CLAUDE_AGENT_PROMPT_INDEX).update();
         db.sql(RAW_RECEIVED_AT_INDEX).update();
         db.sql(RAW_PROMPT_ID_INDEX).update();
         db.sql(USAGE_WINDOW_TIME_INDEX).update();

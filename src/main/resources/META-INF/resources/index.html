@@ -798,6 +798,8 @@ const CLAUDE_TIME_GRID = { left: 76, right: 24, top: 34, bottom: 50 };
 
 const charts = {};
 let lastData = null;
+let refreshInFlight = false;
+let refreshQueued = false;
 function chart(id) {
   if (!charts[id]) charts[id] = echarts.init($(id));
   return charts[id];
@@ -1368,6 +1370,22 @@ function renderMetricPanels() {
 }
 
 async function refresh() {
+  if (refreshInFlight) {
+    refreshQueued = true;
+    return;
+  }
+  refreshInFlight = true;
+  try {
+    do {
+      refreshQueued = false;
+      await refreshOnce();
+    } while (refreshQueued);
+  } finally {
+    refreshInFlight = false;
+  }
+}
+
+async function refreshOnce() {
   reconcileSourceAndRange();
   renderTabs();
   if (!hasEnabledSource()) {
@@ -1379,17 +1397,17 @@ async function refresh() {
   // Fetch every panel independently. allSettled (not all) so a single failing
   // endpoint (e.g. /usage/history while the codex usage poller is down) updates
   // only its own panel's fallback instead of blanking the whole dashboard.
-	  const settled = await Promise.allSettled([
-	    getJSON("/api/summary?" + rangeQuery()),
-	    getJSON("/api/tokens/by-model?" + rangeQuery()),
-	    getJSON("/api/tokens/by-trigger?" + rangeQuery()),
-	    getJSON("/api/tokens/by-model-trigger?" + rangeQuery()),
-	    getJSON("/api/tokens/by-trigger-timeseries?" + timeQuery()),
-	    getJSON("/api/tokens/by-type-timeseries?" + timeQuery()),
-	    getJSON("/api/usage/history?window=primary&" + timeQuery()),
-	    getJSON("/api/usage/history?window=secondary&" + timeQuery()),
-	    getJSON("/api/cost/by-type-timeseries?" + timeQuery()),
-	    getJSON("/api/cost/by-trigger-timeseries?" + timeQuery()),
+  const settled = await Promise.allSettled([
+    getJSON("/api/summary?" + rangeQuery()),
+    getJSON("/api/tokens/by-model?" + rangeQuery()),
+    getJSON("/api/tokens/by-trigger?" + rangeQuery()),
+    getJSON("/api/tokens/by-model-trigger?" + rangeQuery()),
+    getJSON("/api/tokens/by-trigger-timeseries?" + timeQuery()),
+    getJSON("/api/tokens/by-type-timeseries?" + timeQuery()),
+    getJSON("/api/usage/history?window=primary&" + timeQuery()),
+    getJSON("/api/usage/history?window=secondary&" + timeQuery()),
+    getJSON("/api/cost/by-type-timeseries?" + timeQuery()),
+    getJSON("/api/cost/by-trigger-timeseries?" + timeQuery()),
     getJSON("/api/cost/by-model?" + rangeQuery()),
     getJSON("/api/cost/by-trigger?" + rangeQuery()),
     getJSON("/api/cost/by-model-trigger?" + rangeQuery()),
@@ -1402,50 +1420,50 @@ async function refresh() {
     if (settled[i].status === "fulfilled") return settled[i].value;
     failures++;
     return fallback;
-	  };
-	  const summary = val(0, null);
-	  const tokenByModel = val(1, []);
-	  const tokenByTrigger = val(2, []);
-	  const tokenByModelTrigger = val(3, []);
-	  const tokenTriggerTs = val(4, []);
-	  const tokenTypeTs = val(5, []);
-	  const usage5hHist = val(6, []);
-	  const usageWeeklyHist = val(7, []);
-	  const costTypeTs = val(8, []);
+  };
+  const summary = val(0, null);
+  const tokenByModel = val(1, []);
+  const tokenByTrigger = val(2, []);
+  const tokenByModelTrigger = val(3, []);
+  const tokenTriggerTs = val(4, []);
+  const tokenTypeTs = val(5, []);
+  const usage5hHist = val(6, []);
+  const usageWeeklyHist = val(7, []);
+  const costTypeTs = val(8, []);
   const costTriggerTs = val(9, []);
   const costByModel = val(10, []);
   const costByTrigger = val(11, []);
   const costByModelTrigger = val(12, []);
-	  const conversations = val(13, []);
-	  const completions = val(14, []);
-	  const errors = val(15, []);
-	  lastData = {
-	    tokenByModel,
-	    tokenByTrigger,
-	    tokenByModelTrigger,
-	    tokenTriggerTs,
-	    tokenTypeTs,
-	    usage5hHist,
-	    usageWeeklyHist,
-	    costTypeTs,
-	    costTriggerTs,
-	    costByModel,
-	    costByTrigger,
-	    costByModelTrigger,
-	    conversations,
-	    completions,
-	  };
+  const conversations = val(13, []);
+  const completions = val(14, []);
+  const errors = val(15, []);
+  lastData = {
+    tokenByModel,
+    tokenByTrigger,
+    tokenByModelTrigger,
+    tokenTriggerTs,
+    tokenTypeTs,
+    usage5hHist,
+    usageWeeklyHist,
+    costTypeTs,
+    costTriggerTs,
+    costByModel,
+    costByTrigger,
+    costByModelTrigger,
+    conversations,
+    completions,
+  };
 
-	  if (summary) {
-	    renderCards(summary);
+  if (summary) {
+    renderCards(summary);
     if (state.source === "codex") {
       renderUsageGauges(summary);
     }
-	    $("received").textContent = "received " + formatDateTime(summary.lastReceivedAt);
-	  }
-	  renderTabs();
-	  renderMetricPanels();
-	  renderErrors(errors);
+    $("received").textContent = "received " + formatDateTime(summary.lastReceivedAt);
+  }
+  renderTabs();
+  renderMetricPanels();
+  renderErrors(errors);
   $("updated").textContent = "updated " + formatDateTime(new Date());
   $("err").textContent = failures ? ("⚠ " + failures + " request(s) failed") : "";
 }

@@ -1,7 +1,6 @@
 package cero.ninja.ccc.http;
 
 import cero.ninja.ccc.db.JdbcClient;
-import cero.ninja.ccc.store.Cursors;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -41,9 +40,6 @@ public class DashboardApi {
     JdbcClient db;
 
     @Inject
-    Cursors cursors;
-
-    @Inject
     ObjectMapper objectMapper;
 
     @ConfigProperty(name = "ccc-usage-dashboard.codex.enabled", defaultValue = "true")
@@ -72,6 +68,22 @@ public class DashboardApi {
             long backlog,
             String lastReceivedAt,
             List<UsageLatest> usage) {}
+
+    private record SummaryTotals(
+            double totalCredits,
+            double totalCostUsd,
+            long totalInputTokens,
+            long totalCachedInputTokens,
+            long totalOutputTokens,
+            long totalEvents,
+            long eventsWithCredits,
+            long eventsWithCost) {}
+
+    private record RawSummary(
+            long rawRecords,
+            long annotateCursor,
+            long backlog,
+            String lastReceivedAt) {}
 
     @RegisterForReflection
     public record UsageLatest(
@@ -307,77 +319,45 @@ public class DashboardApi {
             @QueryParam("to") Long toEpoch) {
         String sourceTool = sourceTool(source);
         TimeBounds time = timeBounds(range, fromEpoch, toEpoch);
-        double totalCredits = db.sql(
-                        "SELECT round(coalesce(sum(total_credits), 0), 4) FROM annotated_events "
-                        + "WHERE total_credits IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
+        SummaryTotals totals = db.sql("""
+                        SELECT round(coalesce(sum(total_credits), 0), 4) AS total_credits,
+                               round(coalesce(sum(cost_usd), 0), 6) AS total_cost_usd,
+                               coalesce(sum(input_token_count), 0) AS total_input_tokens,
+                               coalesce(sum(cached_input_token_count), 0) AS total_cached_input_tokens,
+                               coalesce(sum(output_token_count), 0) AS total_output_tokens,
+                               count(*) AS total_events,
+                               count(total_credits) AS events_with_credits,
+                               count(cost_usd) AS events_with_cost
+                        FROM annotated_events
+                        WHERE %s AND %s
+                        """.formatted(TIME_FILTER, SOURCE_FILTER))
                 .param("sinceEpoch", time.sinceEpoch())
                 .param("untilEpoch", time.untilEpoch())
                 .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getDouble(1)).single();
-        double totalCostUsd = db.sql(
-                        "SELECT round(coalesce(sum(cost_usd), 0), 6) FROM annotated_events "
-                        + "WHERE cost_usd IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getDouble(1)).single();
-        long totalEvents = db.sql(
-                        "SELECT count(*) FROM annotated_events WHERE " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getLong(1)).single();
-        long eventsWithCredits = db.sql(
-                        "SELECT count(*) FROM annotated_events "
-                        + "WHERE total_credits IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getLong(1)).single();
-        long eventsWithCost = db.sql(
-                        "SELECT count(*) FROM annotated_events "
-                        + "WHERE cost_usd IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getLong(1)).single();
-        long totalInputTokens = db.sql(
-                        "SELECT coalesce(sum(input_token_count), 0) FROM annotated_events "
-                        + "WHERE input_token_count IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getLong(1)).single();
-        long totalCachedInputTokens = db.sql(
-                        "SELECT coalesce(sum(cached_input_token_count), 0) FROM annotated_events "
-                        + "WHERE cached_input_token_count IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getLong(1)).single();
-        long totalOutputTokens = db.sql(
-                        "SELECT coalesce(sum(output_token_count), 0) FROM annotated_events "
-                        + "WHERE output_token_count IS NOT NULL AND " + TIME_FILTER + " AND " + SOURCE_FILTER)
-                .param("sinceEpoch", time.sinceEpoch())
-                .param("untilEpoch", time.untilEpoch())
-                .param("sourceTool", sourceTool)
-                .query((rs, row) -> rs.getLong(1)).single();
-        long rawRecords = db.sql("SELECT count(*) FROM otel_log_records")
-                .query((rs, row) -> rs.getLong(1)).single();
-        String lastReceivedAt = db.sql(
-                        "SELECT datetime(max(received_at), 'localtime') FROM otel_log_records")
-                .query((rs, row) -> rs.getString(1)).optional().orElse(null);
-        long annotateCursor = cursors.getLong("annotate_log_id", 0);
+                .query(SummaryTotals.class).single();
+
         // True unprocessed backlog: raw rows past the cursor. (rawRecords is a count and
         // annotateCursor is the last-processed log *id* — subtracting them mixes units and
         // can even go negative when autoincrement skips ids.)
-        long backlog = db.sql("SELECT count(*) FROM otel_log_records WHERE id > :cursor")
-                .param("cursor", annotateCursor)
-                .query((rs, row) -> rs.getLong(1)).single();
+        RawSummary raw = db.sql("""
+                WITH annotate_cursor(value) AS (
+                  SELECT coalesce((
+                    SELECT CAST(value AS INTEGER) FROM cursor WHERE name = 'annotate_log_id'
+                  ), 0)
+                )
+                SELECT count(raw.id) AS raw_records,
+                       annotate_cursor.value AS annotate_cursor,
+                       coalesce(sum(CASE WHEN raw.id > annotate_cursor.value THEN 1 ELSE 0 END), 0) AS backlog,
+                       datetime(max(raw.received_at), 'localtime') AS last_received_at
+                FROM annotate_cursor
+                LEFT JOIN otel_log_records raw ON 1 = 1
+                GROUP BY annotate_cursor.value
+                """).query(RawSummary.class).single();
 
-        return new Summary(totalCredits, totalCostUsd, totalInputTokens, totalCachedInputTokens, totalOutputTokens,
-                totalEvents, eventsWithCredits, eventsWithCost, rawRecords,
-                annotateCursor, backlog, lastReceivedAt, usageLatest());
+        return new Summary(totals.totalCredits(), totals.totalCostUsd(), totals.totalInputTokens(),
+                totals.totalCachedInputTokens(), totals.totalOutputTokens(), totals.totalEvents(),
+                totals.eventsWithCredits(), totals.eventsWithCost(), raw.rawRecords(), raw.annotateCursor(),
+                raw.backlog(), raw.lastReceivedAt(), usageLatest());
     }
 
     @GET

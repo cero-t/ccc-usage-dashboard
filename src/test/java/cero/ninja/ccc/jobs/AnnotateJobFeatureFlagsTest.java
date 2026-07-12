@@ -141,6 +141,22 @@ class AnnotateJobFeatureFlagsTest {
     }
 
     @Test
+    void reclassifiesClaudeAgentWhenUserPromptArrivesLater() {
+        insertClaudeApiRequest(50, "claude-agent-late-prompt", "prompt-agent-late",
+                "agent:builtin:workflow-subagent", "workflow-subagent");
+
+        annotateJob.run();
+
+        assertEquals("agent", triggerByRequest("claude-agent-late-prompt"));
+
+        insertClaudeUserPrompt(51, "prompt-agent-late");
+        annotateJob.run();
+
+        assertEquals("user_driven_agent", triggerByRequest("claude-agent-late-prompt"));
+        assertEquals(51, cursors.getLong("annotate_log_id", 0));
+    }
+
+    @Test
     void configEndpointReflectsFeatureFlags() {
         given()
                 .when().get("/api/config")

@@ -98,6 +98,21 @@ class AnnotateJobCodexDbPathsTest {
         assertEquals("ambient", triggerBySourceLogId(2));
     }
 
+    @Test
+    void continuesWhenCodexDbCandidatesAreMissing() throws Exception {
+        for (Path path : List.of(SQLITE_STATE, ROOT_STATE, SQLITE_LOGS, ROOT_LOGS)) {
+            deleteSqliteFiles(path);
+        }
+        insertCodexRaw(1, "codex-thread-without-local-db");
+        insertClaudeRaw(2);
+
+        annotateJob.run();
+
+        assertEquals("background", triggerBySourceLogId(1));
+        assertEquals(1, countBySource("claude"));
+        assertEquals(2, cursors.getLong("annotate_log_id", 0));
+    }
+
     private static void deleteSqliteFiles(Path path) throws Exception {
         Files.deleteIfExists(path);
         Files.deleteIfExists(Path.of(path + "-wal"));
@@ -176,6 +191,28 @@ class AnnotateJobCodexDbPathsTest {
                 """.formatted(threadId));
     }
 
+    private void insertClaudeRaw(long id) {
+        insertRaw(id, """
+                {
+                  "observed_time_unix_nano": 1781208060000000000,
+                  "body": "api_request",
+                  "attributes": {
+                    "event.name": "api_request",
+                    "request_id": "claude-after-missing-codex-db",
+                    "session.id": "claude-session-1",
+                    "model": "claude-fable-5",
+                    "input_tokens": 200,
+                    "output_tokens": 25,
+                    "query_source": "user"
+                  },
+                  "resource_attributes": {
+                    "service.name": "claude-code",
+                    "host.name": "test-host"
+                  }
+                }
+                """);
+    }
+
     private void insertRaw(long id, String recordJson) {
         db.sql("""
                 INSERT INTO otel_log_records (id, record_json)
@@ -203,6 +240,13 @@ class AnnotateJobCodexDbPathsTest {
                 """)
                 .param("source_log_id", sourceLogId)
                 .query((rs, row) -> rs.getString(1))
+                .single();
+    }
+
+    private int countBySource(String sourceTool) {
+        return db.sql("SELECT count(*) FROM annotated_events WHERE source_tool = :source_tool")
+                .param("source_tool", sourceTool)
+                .query((rs, row) -> rs.getInt(1))
                 .single();
     }
 
