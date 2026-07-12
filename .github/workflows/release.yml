@@ -110,6 +110,7 @@ jobs:
             --force \
             --sign "$signing_identity" \
             --keychain "$RUNNER_TEMP/signing.keychain-db" \
+            --entitlements .github/macos-entitlements.plist \
             --options runtime \
             --timestamp \
             "$BINARY_PATH"
