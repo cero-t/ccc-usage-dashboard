@@ -1,19 +1,28 @@
 name: release
 
-# Build the macOS (Apple Silicon) single-binary native image on a version tag and
-# attach it to a draft GitHub Release. Tag with e.g.
-# `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+# Tag pushes create a draft GitHub Release only after the native executable is
+# signed, notarized, and smoke-tested. A manual dispatch performs the same
+# validation but never creates or updates a GitHub Release.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: native (macos-arm64)
+  build-sign-notarize:
+    name: signed native (macos-arm64)
     runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      BINARY_PATH: dist/ccc-usage-dashboard
+      ARCHIVE_PATH: dist/ccc-usage-dashboard-macos-arm64.zip
     steps:
       - uses: actions/checkout@v6
 
@@ -28,15 +37,257 @@ jobs:
       - name: Build native binary
         run: ./mvnw -B -ntp -DskipTests -Dnative package
 
-      - name: Stage artifact
+      - name: Stage native binary
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
-          cp target/ccc-usage-dashboard dist/ccc-usage-dashboard
-          cd dist
-          ditto -c -k ccc-usage-dashboard ccc-usage-dashboard-macos-arm64.zip
+          cp target/ccc-usage-dashboard "$BINARY_PATH"
+          chmod 755 "$BINARY_PATH"
 
-      - name: Attach to release
-        uses: softprops/action-gh-release@v2
+      - name: Import signing and notarization credentials
+        shell: bash
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          : "${CERTIFICATE_P12_BASE64:?MACOS_CERTIFICATE_P12_BASE64 is not set}"
+          : "${CERTIFICATE_PASSWORD:?MACOS_CERTIFICATE_PASSWORD is not set}"
+          : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is not set}"
+          : "${NOTARY_KEY_P8_BASE64:?APP_STORE_CONNECT_API_KEY_P8_BASE64 is not set}"
+
+          certificate_path="$RUNNER_TEMP/signing-certificate.p12"
+          notary_key_path="$RUNNER_TEMP/notary-api-key.p8"
+          keychain_path="$RUNNER_TEMP/signing.keychain-db"
+          identity_list="$RUNNER_TEMP/signing-identities.txt"
+          keychain_password="$(openssl rand -hex 32)"
+
+          printf '::add-mask::%s\n' "$keychain_password"
+          printf '%s' "$CERTIFICATE_P12_BASE64" | /usr/bin/base64 -D > "$certificate_path"
+          printf '%s' "$NOTARY_KEY_P8_BASE64" | /usr/bin/base64 -D > "$notary_key_path"
+          chmod 600 "$certificate_path" "$notary_key_path"
+          grep -q '^-----BEGIN PRIVATE KEY-----$' "$notary_key_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -f pkcs12 \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign >/dev/null
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path" >/dev/null
+          security list-keychains -d user -s "$keychain_path"
+
+          security find-identity -v -p codesigning "$keychain_path" > "$identity_list"
+          signing_identity="$(sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' "$identity_list" | head -1)"
+          rm -f "$identity_list"
+          if [[ -z "$signing_identity" || "$signing_identity" != *"(${APPLE_TEAM_ID})" ]]; then
+            echo '::error::The imported Developer ID Application identity does not match APPLE_TEAM_ID.'
+            exit 1
+          fi
+
+          printf '%s' "$signing_identity" > "$RUNNER_TEMP/signing-identity.txt"
+          chmod 600 "$RUNNER_TEMP/signing-identity.txt"
+
+      - name: Sign and verify native binary
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          signing_identity="$(cat "$RUNNER_TEMP/signing-identity.txt")"
+          signature_details="$RUNNER_TEMP/codesign-details.txt"
+
+          codesign \
+            --force \
+            --sign "$signing_identity" \
+            --keychain "$RUNNER_TEMP/signing.keychain-db" \
+            --options runtime \
+            --timestamp \
+            "$BINARY_PATH"
+          codesign --verify --deep --strict --verbose=2 "$BINARY_PATH"
+
+          codesign --display --verbose=4 "$BINARY_PATH" 2> "$signature_details"
+          grep -q '^Authority=Developer ID Application:' "$signature_details"
+          grep -q 'flags=.*runtime' "$signature_details"
+          grep -q '^Timestamp=' "$signature_details"
+          grep -q "^TeamIdentifier=${APPLE_TEAM_ID}$" "$signature_details"
+          rm -f "$signature_details"
+
+      - name: Package signed binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            ditto -c -k ccc-usage-dashboard ccc-usage-dashboard-macos-arm64.zip
+          )
+
+      - name: Submit archive for notarization
+        shell: bash
+        env:
+          NOTARY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          : "${NOTARY_KEY_ID:?APP_STORE_CONNECT_KEY_ID is not set}"
+          : "${NOTARY_ISSUER_ID:?APP_STORE_CONNECT_ISSUER_ID is not set}"
+
+          notary_result="$RUNNER_TEMP/notary-result.json"
+          notary_log="$RUNNER_TEMP/notary-log.json"
+          if ! xcrun notarytool submit "$ARCHIVE_PATH" \
+            --key "$RUNNER_TEMP/notary-api-key.p8" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait \
+            --timeout 60m \
+            --output-format json > "$notary_result"; then
+            echo '::error::The notarization submission failed.'
+            exit 1
+          fi
+
+          status="$(jq -r '.status // empty' "$notary_result")"
+          submission_id="$(jq -r '.id // empty' "$notary_result")"
+          if [[ "$status" != 'Accepted' ]]; then
+            echo "::error::The notarization result was ${status:-unknown}, not Accepted."
+            if [[ -n "$submission_id" ]]; then
+              xcrun notarytool log "$submission_id" "$notary_log" \
+                --key "$RUNNER_TEMP/notary-api-key.p8" \
+                --key-id "$NOTARY_KEY_ID" \
+                --issuer "$NOTARY_ISSUER_ID" || true
+              if [[ -f "$notary_log" ]]; then
+                cat "$notary_log"
+              fi
+            fi
+            exit 1
+          fi
+
+          printf 'Notarization status: Accepted\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test packaged artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_dir="$RUNNER_TEMP/packaged-smoke"
+          smoke_home="$RUNNER_TEMP/smoke-home"
+          smoke_log="$RUNNER_TEMP/smoke.log"
+          smoke_binary="$smoke_dir/ccc-usage-dashboard"
+
+          rm -rf "$smoke_dir" "$smoke_home"
+          mkdir -p "$smoke_dir" "$smoke_home"
+          ditto -x -k "$ARCHIVE_PATH" "$smoke_dir"
+          test -x "$smoke_binary"
+          codesign --verify --deep --strict --verbose=2 "$smoke_binary"
+
+          CCC_USAGE_DASHBOARD_HOME="$smoke_home" \
+          CODEX_USAGE_DASHBOARD_CODEX_ENABLED=false \
+          CODEX_USAGE_DASHBOARD_CLAUDE_ENABLED=false \
+          QUARKUS_HTTP_PORT=49318 \
+          QUARKUS_GRPC_SERVER_PORT=49317 \
+          QUARKUS_LOG_FILE_ENABLED=false \
+            "$smoke_binary" > "$smoke_log" 2>&1 &
+          smoke_pid=$!
+
+          stop_smoke_process() {
+            if kill -0 "$smoke_pid" 2>/dev/null; then
+              kill "$smoke_pid" 2>/dev/null || true
+              wait "$smoke_pid" 2>/dev/null || true
+            fi
+          }
+          trap stop_smoke_process EXIT
+
+          ready=false
+          for ((attempt = 1; attempt <= 60; attempt++)); do
+            if ! kill -0 "$smoke_pid" 2>/dev/null; then
+              cat "$smoke_log"
+              echo '::error::The packaged binary exited before becoming healthy.'
+              exit 1
+            fi
+            if curl --fail --silent --output /dev/null http://127.0.0.1:49318/health; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "$ready" != true ]]; then
+            cat "$smoke_log"
+            echo '::error::The packaged binary did not become healthy within 60 seconds.'
+            exit 1
+          fi
+
+          stop_smoke_process
+          trap - EXIT
+
+      - name: Create SHA-256 digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            shasum -a 256 ccc-usage-dashboard-macos-arm64.zip \
+              > ccc-usage-dashboard-macos-arm64.zip.sha256
+            shasum -a 256 -c ccc-usage-dashboard-macos-arm64.zip.sha256
+          )
+
+      - name: Delete signing credentials
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" >/dev/null 2>&1 || true
+          rm -f \
+            "$RUNNER_TEMP/signing-certificate.p12" \
+            "$RUNNER_TEMP/notary-api-key.p8" \
+            "$RUNNER_TEMP/signing-identities.txt" \
+            "$RUNNER_TEMP/signing-identity.txt" \
+            "$RUNNER_TEMP/codesign-details.txt" \
+            "$RUNNER_TEMP/notary-result.json" \
+            "$RUNNER_TEMP/notary-log.json"
+
+      - name: Upload validated artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-arm64-release
+          path: |
+            dist/ccc-usage-dashboard-macos-arm64.zip
+            dist/ccc-usage-dashboard-macos-arm64.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: create draft release
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: build-sign-notarize
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download validated artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: macos-arm64-release
+          path: dist
+
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
-          files: dist/ccc-usage-dashboard-macos-arm64.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## macOS Apple Silicon artifact
+
+            `ccc-usage-dashboard-macos-arm64.zip` is signed with a Developer ID
+            Application certificate and notarized by Apple. The accompanying
+            `.sha256` file contains the SHA-256 digest of the final ZIP.
+          files: |
+            dist/ccc-usage-dashboard-macos-arm64.zip
+            dist/ccc-usage-dashboard-macos-arm64.zip.sha256

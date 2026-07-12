@@ -46,14 +46,17 @@ chmod +x ccc-usage-dashboard
 ./ccc-usage-dashboard
 ```
 
-The release binary is not currently signed or notarized. If macOS blocks it with
-"Apple could not verify" and you trust the downloaded file, remove the quarantine
-attribute and run it again:
+Release binaries through `v0.2.0` are not signed or notarized. If macOS blocks
+one of these binaries with "Apple could not verify" and you trust the downloaded
+file, remove the quarantine attribute and run it again:
 
 ```sh
 xattr -d com.apple.quarantine ccc-usage-dashboard
 ./ccc-usage-dashboard
 ```
+
+This workaround is not required for `v0.3.0` or later releases, which are
+signed and notarized.
 
 On another platform, or want to build it yourself? Build from source — see
 [`dev_docs/development.md`](dev_docs/development.md).

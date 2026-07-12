@@ -36,12 +36,14 @@ chmod +x ccc-usage-dashboard
 ./ccc-usage-dashboard
 ```
 
-現在のリリースバイナリは署名・notarize していません。macOS で "Apple could not verify" と表示されて起動できない場合、ダウンロードしたファイルを信頼できるときだけ quarantine 属性を外して再実行してください:
+`v0.2.0`以前のリリースバイナリは署名・notarize していません。macOS で "Apple could not verify" と表示されて起動できない場合、ダウンロードしたファイルを信頼できるときだけ quarantine 属性を外して再実行してください:
 
 ```sh
 xattr -d com.apple.quarantine ccc-usage-dashboard
 ./ccc-usage-dashboard
 ```
+
+`v0.3.0`以降のリリースは署名・notarize済みのため、この手順は不要です。
 
 別のプラットフォームを使う場合や、自分でビルドしたい場合は、ソースからビルドしてください — [`dev_docs/development.md`](dev_docs/development.md) を参照。
 
