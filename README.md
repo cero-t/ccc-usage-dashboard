@@ -68,8 +68,8 @@ http://127.0.0.1:4318/
 ```
 
 Use the top-bar tabs to switch between Codex and Claude Code. The range selector
-supports relative windows, the current Codex 5h usage window, and a custom
-from/to range.
+supports relative windows, the current Codex 5h usage window when that limit is
+active, and a custom from/to range.
 
 Most charts and usage tables have a local **Cost / Tokens** toggle. The toggle is
 per panel, so you can compare one breakdown by USD cost while keeping another in

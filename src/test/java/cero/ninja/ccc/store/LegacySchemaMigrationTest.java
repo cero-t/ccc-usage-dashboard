@@ -33,6 +33,7 @@ class LegacySchemaMigrationTest {
         assertTrue(hasColumn("annotated_events", "request_id"));
         assertTrue(hasColumn("annotated_events", "trigger"));
         assertTrue(hasColumn("annotated_events", "reported_cost_usd"));
+        assertTrue(hasColumn("usage_samples", "window_duration_mins"));
         assertTrue(indexExists("idx_annotated_events_source_unique"));
         assertTrue(indexExists("idx_annotated_events_claude_agent_prompt"));
     }

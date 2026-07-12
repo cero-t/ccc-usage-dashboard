@@ -62,6 +62,35 @@ class DashboardApiSummaryTest {
         assertEquals(1, summary.backlog());
     }
 
+    @Test
+    void latestUsageReturnsOnlyAvailableWindowsWithActualDurations() {
+        insertUsage(1, "primary", 300, 70.0, "2026-07-13 01:00:00");
+        insertUsage(2, "secondary", 10080, 11.0, "2026-07-13 01:00:00");
+        insertUsage(3, "primary", 10080, 13.0, "2026-07-13 01:01:00");
+        insertUsage(4, "secondary", null, null, "2026-07-13 01:01:00");
+
+        var latest = api.usageLatest();
+
+        assertEquals(1, latest.size());
+        assertEquals("primary", latest.getFirst().window());
+        assertEquals(10080, latest.getFirst().windowDurationMins());
+        assertEquals(13.0, latest.getFirst().usedPercent());
+    }
+
+    @Test
+    void usageHistoryIncludesDurationForSlotTransitions() {
+        insertUsage(1, "primary", 300, 70.0, "2023-11-14 22:14:00");
+        insertUsage(2, "primary", 10080, 13.0, "2023-11-14 22:15:00");
+
+        var history = api.usageHistory(
+                "primary", "6h", "1m", 1_700_000_000L, 1_700_001_000L);
+
+        assertEquals(2, history.size());
+        assertEquals("primary", history.get(0).window());
+        assertEquals(300, history.get(0).windowDurationMins());
+        assertEquals(10080, history.get(1).windowDurationMins());
+    }
+
     private void insertAnnotated(long sourceLogId, String sourceTool, long timeUnixNano,
                                  Double totalCredits, Double costUsd, Long inputTokens,
                                  Long cachedTokens, Long outputTokens) {
@@ -92,6 +121,26 @@ class DashboardApiSummaryTest {
                 """)
                 .param("id", id)
                 .param("received_at", receivedAt)
+                .update();
+    }
+
+    private void insertUsage(long id, String window, Integer durationMins,
+                             Double usedPercent, String sampledAt) {
+        db.sql("""
+                INSERT INTO usage_samples (
+                  id, sampled_at, plan_type, window, window_duration_mins,
+                  used_percent, remaining_percent, resets_at
+                ) VALUES (
+                  :id, :sampled_at, 'prolite', :window, :duration_mins,
+                  :used_percent, :remaining_percent, 1784487921
+                )
+                """)
+                .param("id", id)
+                .param("sampled_at", sampledAt)
+                .param("window", window)
+                .param("duration_mins", durationMins)
+                .param("used_percent", usedPercent)
+                .param("remaining_percent", usedPercent == null ? null : 100.0 - usedPercent)
                 .update();
     }
 

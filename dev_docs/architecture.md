@@ -108,7 +108,11 @@ initialized
 account/rateLimits/read
 ```
 
-Each returned primary/secondary usage window is appended to `usage_samples`.
+Each poll appends the state of both primary/secondary slots to `usage_samples`,
+including the returned `windowDurationMins`. A missing slot is recorded with a
+null percentage so the latest-state API does not keep showing a stale limit.
+The UI derives labels such as `5h` and `weekly` from the duration; the slot name
+is only source provenance because Codex can move a limit between slots.
 
 The usage job also obeys `ccc-usage-dashboard.codex.enabled`; when Codex is
 disabled, it does not launch the `codex` binary.
@@ -195,7 +199,8 @@ grain=5m
 
 `from` and `to` override the relative `range`. The UI's `Current 5h window` and
 `Custom` range options are client-side states: before calling the API, the page
-resolves them into explicit `from`/`to` values.
+resolves them into explicit `from`/`to` values. `Current 5h window` is offered
+only when the latest duration-aware snapshot includes a 300-minute limit.
 
 Both Codex and Claude Code tabs can render most breakdown panels by USD cost or
 raw token count. Cost mode uses `/api/cost/...`; token mode uses `/api/tokens/...`.

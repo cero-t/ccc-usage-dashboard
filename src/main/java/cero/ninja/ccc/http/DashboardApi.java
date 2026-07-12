@@ -88,6 +88,7 @@ public class DashboardApi {
     @RegisterForReflection
     public record UsageLatest(
             String window,
+            Integer windowDurationMins,
             String planType,
             Double usedPercent,
             Double remainingPercent,
@@ -153,6 +154,8 @@ public class DashboardApi {
 
     @RegisterForReflection
     public record UsagePoint(
+            String window,
+            Integer windowDurationMins,
             String sampledAt,
             Double usedPercent) {}
 
@@ -595,6 +598,7 @@ public class DashboardApi {
     public List<UsageLatest> usageLatest() {
         return db.sql("""
                 SELECT window,
+                       window_duration_mins,
                        plan_type,
                        used_percent,
                        remaining_percent,
@@ -602,6 +606,7 @@ public class DashboardApi {
                        datetime(sampled_at, 'localtime')  AS sampled_at
                 FROM usage_samples
                 WHERE id IN (SELECT max(id) FROM usage_samples GROUP BY window)
+                  AND used_percent IS NOT NULL
                 ORDER BY window
                 """).query(UsageLatest.class).list();
     }
@@ -621,6 +626,7 @@ public class DashboardApi {
                          ((CAST(strftime('%s', datetime(sampled_at, 'localtime')) AS INTEGER) / :grainSeconds) * :grainSeconds) AS bucket_epoch
                   FROM usage_samples
                   WHERE window = :window
+                    AND used_percent IS NOT NULL
                     AND sampled_at >= datetime(:sinceEpoch, 'unixepoch')
                     AND sampled_at < datetime(:untilEpoch, 'unixepoch')
                 ),
@@ -629,7 +635,9 @@ public class DashboardApi {
                   FROM points
                   GROUP BY bucket_epoch
                 )
-                SELECT strftime('%Y-%m-%d %H:%M', last_sample.bucket_epoch, 'unixepoch') AS sampled_at,
+                SELECT usage_samples.window,
+                       usage_samples.window_duration_mins,
+                       strftime('%Y-%m-%d %H:%M', last_sample.bucket_epoch, 'unixepoch') AS sampled_at,
                        usage_samples.used_percent
                 FROM last_sample
                 JOIN usage_samples ON usage_samples.id = last_sample.id

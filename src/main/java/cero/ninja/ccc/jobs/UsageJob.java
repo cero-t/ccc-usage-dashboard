@@ -33,8 +33,11 @@ public class UsageJob {
     private static final Logger LOG = Logger.getLogger(UsageJob.class);
 
     private static final String INSERT_USAGE = """
-            INSERT INTO usage_samples (plan_type, window, used_percent, remaining_percent, resets_at)
-            VALUES (:plan_type, :window, :used_percent, :remaining_percent, :resets_at)
+            INSERT INTO usage_samples (
+              plan_type, window, window_duration_mins, used_percent, remaining_percent, resets_at
+            ) VALUES (
+              :plan_type, :window, :window_duration_mins, :used_percent, :remaining_percent, :resets_at
+            )
             """;
 
     @Inject
@@ -71,31 +74,35 @@ public class UsageJob {
             return;
         }
         String plan = textOrNull(snap.path("planType"));
-        int stored = storeWindow(plan, "primary", snap.path("primary"))
-                + storeWindow(plan, "secondary", snap.path("secondary"));
+        int stored = storeRateLimits(snap);
         if (stored > 0) {
             LOG.infof("usage: %d window sample(s) stored (plan=%s)", stored, plan);
         }
     }
 
+    int storeRateLimits(JsonNode snap) {
+        String plan = textOrNull(snap.path("planType"));
+        return storeWindow(plan, "primary", snap.path("primary"))
+                + storeWindow(plan, "secondary", snap.path("secondary"));
+    }
+
     private int storeWindow(String plan, String window, JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return 0;
-        }
-        JsonNode used = node.path("usedPercent");
-        JsonNode reset = node.path("resetsAt");
-        if (used.isMissingNode() || used.isNull()) {
-            return 0;
-        }
-        double usedPercent = used.asDouble();
+        boolean available = !node.isMissingNode() && !node.isNull();
+        JsonNode used = available ? node.path("usedPercent") : null;
+        JsonNode duration = available ? node.path("windowDurationMins") : null;
+        JsonNode reset = available ? node.path("resetsAt") : null;
+        Double usedPercent = used == null || used.isMissingNode() || used.isNull()
+                ? null : used.asDouble();
         db.sql(INSERT_USAGE)
                 .param("plan_type", plan)
                 .param("window", window)
+                .param("window_duration_mins",
+                        duration == null || duration.isMissingNode() || duration.isNull() ? null : duration.asInt())
                 .param("used_percent", usedPercent)
-                .param("remaining_percent", 100.0 - usedPercent)
-                .param("resets_at", reset.isMissingNode() || reset.isNull() ? null : reset.asLong())
+                .param("remaining_percent", usedPercent == null ? null : 100.0 - usedPercent)
+                .param("resets_at", reset == null || reset.isMissingNode() || reset.isNull() ? null : reset.asLong())
                 .update();
-        return 1;
+        return usedPercent == null ? 0 : 1;
     }
 
     /** Returns the {@code result} object of the {@code rateLimits/read} (id=1) response. */

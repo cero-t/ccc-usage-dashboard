@@ -129,6 +129,7 @@ public class SchemaInitializer {
               sampled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               plan_type TEXT,
               window TEXT NOT NULL,
+              window_duration_mins INTEGER,
               used_percent REAL,
               remaining_percent REAL,
               resets_at INTEGER
@@ -266,6 +267,9 @@ public class SchemaInitializer {
         ensureColumn("annotated_events", "trigger", "TEXT");
         ensureColumn("annotated_events", "originator", "TEXT");
         ensureColumn("annotated_events", "host", "TEXT");
+        // Codex can move the weekly limit between primary/secondary slots, so
+        // persist the actual duration instead of deriving meaning from the slot.
+        ensureColumn("usage_samples", "window_duration_mins", "INTEGER");
         db.sql(BACKFILL_CODEX_COST_USD)
                 .param("usd_per_credit", CODEX_USD_PER_CREDIT)
                 .update();

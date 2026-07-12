@@ -250,7 +250,9 @@ codex app-server --listen stdio://
 account/rateLimits/read
 ```
 
-and appends returned windows to `usage_samples`.
+and appends returned windows to `usage_samples`. Window meaning comes from the
+returned duration (for example 300 minutes or 10,080 minutes), not from whether
+Codex placed the value in its primary or secondary slot.
 
 Usage percent is account-wide and sampled at poll time. It is useful for local
 correlation, not a replacement for official billing/accounting.

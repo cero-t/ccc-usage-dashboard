@@ -39,6 +39,8 @@
   section > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
     color: var(--muted); margin: 0 0 10px; font-weight: 600; }
   .top-grid { display: grid; grid-template-columns: minmax(210px, .78fr) repeat(2, minmax(220px, 1fr)); gap: 18px; align-items: stretch; }
+  .top-grid.one-usage-window { grid-template-columns: minmax(210px, .78fr) minmax(220px, 1fr); }
+  .top-grid.no-usage-window { grid-template-columns: minmax(210px, .78fr); }
   .metrics { display: grid; gap: 12px; align-content: stretch; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
   .card .k { color: var(--muted); font-size: 12px; }
@@ -63,6 +65,7 @@
   .chart.sm { height: 290px; }
   .chart.donut { height: 260px; min-height: 220px; }
   .chart.gauge { height: 200px; position: relative; }
+  .usage-panel.usage-unavailable { display: none; }
   .gauge-reset { position: absolute; top: 6px; right: 8px; z-index: 1; color: var(--muted);
     font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none; }
   .chart.no-data { display: grid; place-items: center; color: var(--muted); }
@@ -135,8 +138,8 @@
 
   <section class="top-grid">
     <div class="metrics" id="cards"></div>
-    <div class="panel codex-only"><div id="gauge5h" class="chart gauge"></div></div>
-    <div class="panel codex-only"><div id="gaugeWeekly" class="chart gauge"></div></div>
+    <div id="gaugePanel1" class="panel codex-only usage-panel"><div id="gauge5h" class="chart gauge"></div></div>
+    <div id="gaugePanel2" class="panel codex-only usage-panel"><div id="gaugeWeekly" class="chart gauge"></div></div>
   </section>
 
   <section class="codex-only">
@@ -312,7 +315,9 @@ const DEFAULT_GRAIN = "5m";
 const DEFAULT_SOURCE = "codex";
 const CURRENT_5H_RANGE = "current5h";
 const CUSTOM_RANGE = "custom";
-const USAGE_WINDOW_MS = 5 * 60 * 60 * 1000;
+const FIVE_HOUR_WINDOW_MINS = 5 * 60;
+const WEEKLY_WINDOW_MINS = 7 * 24 * 60;
+const USAGE_WINDOW_MS = FIVE_HOUR_WINDOW_MINS * 60 * 1000;
 const USAGE_WINDOW_START_BUFFER_MS = 60 * 1000;
 const DEFAULT_METRIC_MODE = "cost";
 const METRIC_MODES = {
@@ -380,6 +385,7 @@ const state = {
   })),
 };
 let toolConfig = { codexEnabled: true, claudeEnabled: true };
+let latestUsageWindows = null;
 
 function sourceEnabled(source) {
   return source === "codex" ? toolConfig.codexEnabled : toolConfig.claudeEnabled;
@@ -398,13 +404,13 @@ function reconcileSourceAndRange() {
   if (enabled.length && !sourceEnabled(state.source)) {
     state.source = enabled[0];
   }
-  if (!toolConfig.codexEnabled && state.range === CURRENT_5H_RANGE) {
+  if ((!toolConfig.codexEnabled || !hasFiveHourUsageWindow()) && state.range === CURRENT_5H_RANGE) {
     state.range = DEFAULT_RANGE;
   }
 }
 
 function availableRanges() {
-  return toolConfig.codexEnabled
+  return toolConfig.codexEnabled && hasFiveHourUsageWindow()
     ? RANGES
     : RANGES.filter(range => range.id !== CURRENT_5H_RANGE);
 }
@@ -423,13 +429,47 @@ const TRIGGER_COLORS = {
 const TYPE_COLORS = { uncached_input: "#56b4e9", cached_input: "#e69f00", output: "#009e73" };
 const CLAUDE_TYPE_ORDER = ["input", "output", "cache_read", "cache_creation"];
 const CLAUDE_TYPE_COLORS = { input: "#56b4e9", output: "#009e73", cache_read: "#f0e442", cache_creation: "#d55e00" };
-const USAGE_WINDOWS = {
-  primary: { label: "5h", color: "#f0e442" },
-  secondary: { label: "weekly", color: "#cc79a7" },
-};
 const colorFor = (key, map, i) => map[key] || PALETTE[i % PALETTE.length];
-const usageWindow = (key) => USAGE_WINDOWS[key] || { label: key || "usage", color: "#e0a458" };
-const latestUsage = (summary, key) => (summary.usage || []).find(u => u.window === key);
+
+function usageDurationMins(usage) {
+  const duration = Number(usage?.windowDurationMins);
+  if (Number.isFinite(duration) && duration > 0) return duration;
+  // Historical samples predate window_duration_mins. Preserve their previous
+  // meaning until a duration-aware sample arrives.
+  if (usage?.window === "primary") return FIVE_HOUR_WINDOW_MINS;
+  if (usage?.window === "secondary") return WEEKLY_WINDOW_MINS;
+  return null;
+}
+
+function usageWindow(usage) {
+  const duration = usageDurationMins(usage);
+  if (duration === FIVE_HOUR_WINDOW_MINS) return { duration, label: "5h", color: "#f0e442" };
+  if (duration === WEEKLY_WINDOW_MINS) return { duration, label: "weekly", color: "#cc79a7" };
+  if (duration && duration % (24 * 60) === 0) {
+    return { duration, label: `${duration / (24 * 60)}d`, color: "#e0a458" };
+  }
+  if (duration && duration % 60 === 0) {
+    return { duration, label: `${duration / 60}h`, color: "#e0a458" };
+  }
+  return { duration, label: duration ? `${duration}m` : "usage", color: "#e0a458" };
+}
+
+function availableUsageWindows(rows) {
+  const byDuration = new Map();
+  for (const usage of rows || []) {
+    if (usage?.usedPercent == null) continue;
+    const info = usageWindow(usage);
+    byDuration.set(info.duration ?? usage.window, usage);
+  }
+  return [...byDuration.values()].sort((a, b) =>
+    (usageDurationMins(a) ?? Number.MAX_SAFE_INTEGER) - (usageDurationMins(b) ?? Number.MAX_SAFE_INTEGER));
+}
+
+function hasFiveHourUsageWindow() {
+  return latestUsageWindows == null
+    || availableUsageWindows(latestUsageWindows)
+      .some(usage => usageDurationMins(usage) === FIVE_HOUR_WINDOW_MINS);
+}
 
 // Friendly labels for the Codex OTel event names, so a no-token / no-model row
 // reads as "what kind of event" instead of looking empty. Unknown names just drop
@@ -463,6 +503,13 @@ async function loadConfig() {
     };
   } catch {
     toolConfig = { codexEnabled: true, claudeEnabled: true };
+  }
+  if (toolConfig.codexEnabled) {
+    try {
+      latestUsageWindows = await getJSON("/api/usage/latest");
+    } catch {
+      latestUsageWindows = null;
+    }
   }
   reconcileSourceAndRange();
   if (hasEnabledSource()) writeUrlState();
@@ -761,10 +808,19 @@ async function resolveTimeBounds() {
   if (state.range === CURRENT_5H_RANGE) {
     try {
       const usage = await getJSON("/api/usage/latest");
-      const primary = (usage || []).find(u => u.window === "primary");
-      const resetMs = epochParamMs(primary?.resetsAt);
+      latestUsageWindows = usage;
+      const fiveHour = availableUsageWindows(usage)
+        .find(u => usageDurationMins(u) === FIVE_HOUR_WINDOW_MINS);
+      const resetMs = epochParamMs(fiveHour?.resetsAt);
       if (resetMs && resetMs > now) {
         return normalizeBounds(bufferedUsageStartMs(resetMs - USAGE_WINDOW_MS), Math.min(resetMs, now));
+      }
+      if (!fiveHour) {
+        state.range = DEFAULT_RANGE;
+        setupSelect("rangeSelect", availableRanges(), state.range);
+        updateCustomControls();
+        writeUrlState();
+        return fallbackTimeBounds();
       }
     } catch {
       // Fall through to the relative fallback; the main refresh will surface
@@ -833,8 +889,8 @@ function renderCards(s) {
   }));
 }
 
-function renderGauge(id, usage, key) {
-  const info = usageWindow(key);
+function renderGauge(id, usage) {
+  const info = usageWindow(usage);
   const val = usage ? (usage.usedPercent ?? 0) : 0;
   const resetAt = formatResetAt(usage?.resetsAt);
   const name = info.label
@@ -873,12 +929,31 @@ function renderGaugeReset(id, resetAt) {
 }
 
 function renderUsageGauges(summary) {
-  renderGauge("gauge5h", latestUsage(summary, "primary"), "primary");
-  renderGauge("gaugeWeekly", latestUsage(summary, "secondary"), "secondary");
+  const windows = availableUsageWindows(summary.usage);
+  latestUsageWindows = windows;
+  setupSelect("rangeSelect", availableRanges(), state.range);
+
+  const targets = [
+    { panelId: "gaugePanel1", chartId: "gauge5h" },
+    { panelId: "gaugePanel2", chartId: "gaugeWeekly" },
+  ];
+  targets.forEach((target, index) => {
+    const usage = windows[index];
+    $(target.panelId).classList.toggle("usage-unavailable", !usage);
+    if (usage) {
+      renderGauge(target.chartId, usage);
+    } else {
+      clearChart(target.chartId);
+      renderGaugeReset(target.chartId, null);
+    }
+  });
+  const topGrid = document.querySelector(".top-grid");
+  topGrid.classList.toggle("one-usage-window", windows.length === 1);
+  topGrid.classList.toggle("no-usage-window", windows.length === 0);
 }
 
-function usageLine(key, rows) {
-  const info = usageWindow(key);
+function usageLine(rows) {
+  const info = usageWindow(rows[0]);
   return {
     name: info.label + " usage %",
     type: "line",
@@ -890,6 +965,19 @@ function usageLine(key, rows) {
     lineStyle: { width: 2.5, color: info.color },
     itemStyle: { color: info.color },
   };
+}
+
+function usageLines(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const info = usageWindow(row);
+    const key = info.duration ?? row.window;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  return [...groups.values()]
+    .map(group => group.sort((a, b) => String(a.sampledAt).localeCompare(String(b.sampledAt))))
+    .map(usageLine);
 }
 
 function orderedTypeNames(names) {
@@ -907,7 +995,11 @@ function renderMetricTimeSeries(id, points, options) {
   const cfg = metricConfig(options.mode);
   const p = pivot(points, cfg.field);
   const names = options.kind === "type" ? orderedTypeNames(p.names) : p.names;
-  if (!names.length && !options.usage5hHist?.length && !options.usageWeeklyHist?.length) {
+  const usageSeries = usageLines([
+    ...(options.usagePrimaryHist || []),
+    ...(options.usageSecondaryHist || []),
+  ]);
+  if (!names.length && !usageSeries.length) {
     renderNoDataChart(id, cfg.emptyText);
     return;
   }
@@ -920,10 +1012,7 @@ function renderMetricTimeSeries(id, points, options) {
     barMaxWidth: 14,
     itemStyle: { color: options.kind === "type" ? typeColor(n, i) : colorFor(n, TRIGGER_COLORS, i) },
   }));
-  const includeUsage = Boolean(options.usage5hHist || options.usageWeeklyHist);
-  const usageSeries = includeUsage
-    ? [usageLine("primary", options.usage5hHist || []), usageLine("secondary", options.usageWeeklyHist || [])]
-    : [];
+  const includeUsage = usageSeries.length > 0;
   const yAxis = includeUsage
     ? [
       { type: "value", name: cfg.axisName, ...AXIS, axisLabel: { ...AXIS.axisLabel, formatter: cfg.axisFormatter } },
@@ -943,14 +1032,14 @@ function renderMetricTimeSeries(id, points, options) {
 }
 
 // Usage % (right axis, lines) overlaid on cost/token-by-type stacked bars (left axis).
-function renderOverlay(typePoints, mode, usage5hHist, usageWeeklyHist) {
+function renderOverlay(typePoints, mode, usagePrimaryHist, usageSecondaryHist) {
   renderMetricTimeSeries("overlay", typePoints, {
     mode,
     kind: "type",
     grid: CODEX_TIME_GRID,
     xAxis: codexBarTimeAxis,
-    usage5hHist,
-    usageWeeklyHist,
+    usagePrimaryHist,
+    usageSecondaryHist,
   });
 }
 
@@ -1348,7 +1437,8 @@ function renderMetricPanels() {
     const modelMode = metricMode("model");
     const triggerModeSingle = metricMode("trigger");
     const modelTriggerMode = metricMode("modelTrigger");
-    renderOverlay(metricRows(lastData, "TypeTs", typeMode), typeMode, lastData.usage5hHist, lastData.usageWeeklyHist);
+    renderOverlay(metricRows(lastData, "TypeTs", typeMode), typeMode,
+      lastData.usagePrimaryHist, lastData.usageSecondaryHist);
     renderTriggerArea(metricRows(lastData, "TriggerTs", triggerMode), triggerMode);
     renderDistributionPair("modelDonut", "modelBreakdown", metricRows(lastData, "ByModel", modelMode), "rateModel", {}, modelMode);
     renderDistributionPair("triggerDonut", "triggerBreakdown", metricRows(lastData, "ByTrigger", triggerModeSingle), "trigger", TRIGGER_COLORS, triggerModeSingle);
@@ -1427,8 +1517,8 @@ async function refreshOnce() {
   const tokenByModelTrigger = val(3, []);
   const tokenTriggerTs = val(4, []);
   const tokenTypeTs = val(5, []);
-  const usage5hHist = val(6, []);
-  const usageWeeklyHist = val(7, []);
+  const usagePrimaryHist = val(6, []);
+  const usageSecondaryHist = val(7, []);
   const costTypeTs = val(8, []);
   const costTriggerTs = val(9, []);
   const costByModel = val(10, []);
@@ -1443,8 +1533,8 @@ async function refreshOnce() {
     tokenByModelTrigger,
     tokenTriggerTs,
     tokenTypeTs,
-    usage5hHist,
-    usageWeeklyHist,
+    usagePrimaryHist,
+    usageSecondaryHist,
     costTypeTs,
     costTriggerTs,
     costByModel,
