@@ -25,6 +25,30 @@ class ClaudeRateCardTest {
     }
 
     @Test
+    void mapsFutureFable5MinorVersionsToFable5Rates() {
+        ClaudeRateCard.Rates expected = rateCard.rateFor("claude-fable-5");
+
+        assertEquals(expected, rateCard.rateFor("claude-fable-5.1"));
+        assertEquals(expected, rateCard.rateFor("claude-fable-5-1-20260901"));
+    }
+
+    @Test
+    void computesOpus5CostsWithFiveMinuteCacheWrites() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-opus-5",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(5.0, costs.input());
+        assertEquals(6.25, costs.cacheCreation());
+        assertEquals(0.5, costs.cacheRead());
+        assertEquals(25.0, costs.output());
+        assertEquals(36.75, costs.total());
+    }
+
+    @Test
     void computesSonnet5IntroductoryCostsThroughAugust2026() {
         ClaudeRateCard.Costs costs = rateCard.compute(
                 "claude-sonnet-5",

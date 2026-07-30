@@ -13,8 +13,8 @@ class RateCardTest {
     void mapsGpt56AliasAndVariants() {
         assertArrayEquals(new double[]{125, 12.5, 750}, rateCard.rateFor("gpt-5.6"));
         assertArrayEquals(new double[]{125, 12.5, 750}, rateCard.rateFor("gpt-5.6-sol"));
-        assertArrayEquals(new double[]{62.5, 6.25, 375}, rateCard.rateFor("gpt-5.6-terra"));
-        assertArrayEquals(new double[]{25, 2.5, 150}, rateCard.rateFor("gpt-5.6-luna"));
+        assertArrayEquals(new double[]{50, 5, 300}, rateCard.rateFor("gpt-5.6-terra"));
+        assertArrayEquals(new double[]{5, 0.5, 30}, rateCard.rateFor("gpt-5.6-luna"));
     }
 
     @Test

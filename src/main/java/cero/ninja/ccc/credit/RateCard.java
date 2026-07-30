@@ -27,8 +27,8 @@ public class RateCard {
     private static final Map<String, double[]> RATES = Map.ofEntries(
             Map.entry("gpt-5.6", new double[]{125, 12.5, 750}),
             Map.entry("gpt-5.6-sol", new double[]{125, 12.5, 750}),
-            Map.entry("gpt-5.6-terra", new double[]{62.5, 6.25, 375}),
-            Map.entry("gpt-5.6-luna", new double[]{25, 2.5, 150}),
+            Map.entry("gpt-5.6-terra", new double[]{50, 5, 300}),
+            Map.entry("gpt-5.6-luna", new double[]{5, 0.5, 30}),
             Map.entry("gpt-5.5", new double[]{125, 12.5, 750}),
             Map.entry("gpt-5.4", new double[]{62.5, 6.25, 375}),
             Map.entry("gpt-5.4-mini", new double[]{18.75, 1.875, 113}),

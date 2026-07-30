@@ -71,11 +71,12 @@ cost_usd                = sum(component costs)
 
 The live table is `credit/ClaudeRateCard.java`.
 
-As of 2026-07-10:
+As of 2026-07-31:
 
 | model | input | 5m cache write | cache read | output |
 |---|---:|---:|---:|---:|
 | claude-fable-5 / claude-mythos-5 | $10 | $12.50 | $1 | $50 |
+| claude-opus-5 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4.5 through 4.8 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4 / 4.1 (legacy) | $15 | $18.75 | $1.50 | $75 |
 | claude-sonnet-5 (introductory, through 2026-08-31) | $2 | $2.50 | $0.20 | $10 |
@@ -93,6 +94,11 @@ Source of truth:
 ```text
 https://platform.claude.com/docs/en/about-claude/pricing
 ```
+
+The Fable and Mythos mappings intentionally match the `5` major family, so
+future model IDs such as `claude-fable-5.1` or `claude-fable-5-1-*` continue to
+use the Fable 5 rates. A future major version or an actual price change still
+requires a rate-card update.
 
 ## Credit Formula
 
@@ -133,13 +139,13 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-07-10:
+As of 2026-07-31:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
 | gpt-5.6 / gpt-5.6-sol | 125 | 12.5 | 750 |
-| gpt-5.6-terra | 62.5 | 6.25 | 375 |
-| gpt-5.6-luna | 25 | 2.5 | 150 |
+| gpt-5.6-terra | 50 | 5 | 300 |
+| gpt-5.6-luna | 5 | 0.5 | 30 |
 | gpt-5.5 | 125 | 12.5 | 750 |
 | gpt-5.4 | 62.5 | 6.25 | 375 |
 | gpt-5.4-mini | 18.75 | 1.875 | 113 |
