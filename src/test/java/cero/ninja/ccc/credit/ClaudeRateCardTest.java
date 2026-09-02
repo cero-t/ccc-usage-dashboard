@@ -25,11 +25,36 @@ class ClaudeRateCardTest {
     }
 
     @Test
-    void mapsFutureFable5MinorVersionsToFable5Rates() {
-        ClaudeRateCard.Rates expected = rateCard.rateFor("claude-fable-5");
+    void computesFable51CostsWithDiscountedCacheReads() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-fable-5-1",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
 
+        assertEquals(10.0, costs.input());
+        assertEquals(12.5, costs.cacheCreation());
+        assertEquals(0.25, costs.cacheRead());
+        assertEquals(50.0, costs.output());
+        assertEquals(72.75, costs.total());
+    }
+
+    @Test
+    void mapsFable51AndMythos51VariantsToFable51Rates() {
+        ClaudeRateCard.Rates expected = rateCard.rateFor("claude-fable-5-1");
+
+        assertEquals(0.25, expected.cacheReadPerMt());
         assertEquals(expected, rateCard.rateFor("claude-fable-5.1"));
         assertEquals(expected, rateCard.rateFor("claude-fable-5-1-20260901"));
+        assertEquals(expected, rateCard.rateFor("claude-mythos-5-1"));
+        assertEquals(expected, rateCard.rateFor("claude-mythos-5.1"));
+    }
+
+    @Test
+    void keepsFable5AndMythos5CacheReadsAtStandardMultiplier() {
+        assertEquals(1.0, rateCard.rateFor("claude-fable-5").cacheReadPerMt());
+        assertEquals(1.0, rateCard.rateFor("claude-mythos-5").cacheReadPerMt());
     }
 
     @Test
@@ -49,7 +74,7 @@ class ClaudeRateCardTest {
     }
 
     @Test
-    void computesSonnet5IntroductoryCostsThroughAugust2026() {
+    void computesSonnet5StandardCosts() {
         ClaudeRateCard.Costs costs = rateCard.compute(
                 "claude-sonnet-5",
                 1_000_000L,

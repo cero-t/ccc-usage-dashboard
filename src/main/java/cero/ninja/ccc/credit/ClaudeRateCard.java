@@ -12,11 +12,14 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class ClaudeRateCard {
 
+    // Fable 5.1 / Mythos 5.1 cache reads are 0.025x base input (all others 0.1x).
+    private static final Rates FABLE_5_1 = new Rates(10.0, 12.50, 0.25, 50.0);
     private static final Rates FABLE_5 = new Rates(10.0, 12.50, 1.0, 50.0);
     private static final Rates OPUS_5_AND_4_LATEST = new Rates(5.0, 6.25, 0.50, 25.0);
     private static final Rates OPUS_4_LEGACY = new Rates(15.0, 18.75, 1.50, 75.0);
-    // Introductory pricing through 2026-08-31; standard pricing starts 2026-09-01.
-    private static final Rates SONNET_5_INTRO = new Rates(2.0, 2.50, 0.20, 10.0);
+    // Launched as introductory pricing; made the standard price (the planned
+    // 2026-09-01 increase to $3 / $15 was cancelled).
+    private static final Rates SONNET_5 = new Rates(2.0, 2.50, 0.20, 10.0);
     private static final Rates SONNET_4 = new Rates(3.0, 3.75, 0.30, 15.0);
     private static final Rates HAIKU_4_5 = new Rates(1.0, 1.25, 0.10, 5.0);
     private static final Rates HAIKU_3_5 = new Rates(0.80, 1.0, 0.08, 4.0);
@@ -37,6 +40,10 @@ public class ClaudeRateCard {
             return FABLE_5;
         }
         String m = model.strip().toLowerCase();
+        if (m.contains("fable-5-1") || m.contains("fable-5.1")
+                || m.contains("mythos-5-1") || m.contains("mythos-5.1")) {
+            return FABLE_5_1;
+        }
         if (m.contains("fable-5") || m.contains("mythos-5")) {
             return FABLE_5;
         }
@@ -51,7 +58,7 @@ public class ClaudeRateCard {
             return OPUS_4_LEGACY;
         }
         if (m.contains("sonnet-5")) {
-            return SONNET_5_INTRO;
+            return SONNET_5;
         }
         if (m.contains("sonnet-4")) {
             return SONNET_4;

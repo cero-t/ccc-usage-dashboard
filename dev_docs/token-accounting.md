@@ -71,23 +71,29 @@ cost_usd                = sum(component costs)
 
 The live table is `credit/ClaudeRateCard.java`.
 
-As of 2026-07-31:
+As of 2026-09-02:
 
 | model | input | 5m cache write | cache read | output |
 |---|---:|---:|---:|---:|
+| claude-fable-5.1 / claude-mythos-5.1 | $10 | $12.50 | $0.25 | $50 |
 | claude-fable-5 / claude-mythos-5 | $10 | $12.50 | $1 | $50 |
 | claude-opus-5 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4.5 through 4.8 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4 / 4.1 (legacy) | $15 | $18.75 | $1.50 | $75 |
-| claude-sonnet-5 (introductory, through 2026-08-31) | $2 | $2.50 | $0.20 | $10 |
+| claude-sonnet-5 | $2 | $2.50 | $0.20 | $10 |
 | claude-sonnet-4 through 4.6 | $3 | $3.75 | $0.30 | $15 |
 | claude-haiku-4.5 | $1 | $1.25 | $0.10 | $5 |
 | claude-haiku-3.5 (legacy) | $0.80 | $1 | $0.08 | $4 |
 
-Claude Sonnet 5 changes to its standard $3 input / $3.75 5-minute cache
-write / $0.30 cache read / $15 output rates on 2026-09-01. The rate card
-must be updated at that boundary because annotation stores the calculated USD
-cost rather than recalculating it at query time.
+Claude Fable 5.1 and Claude Mythos 5.1 price cache reads at 0.025x the base
+input rate; every other model uses the standard 0.1x multiplier.
+
+Claude Sonnet 5's launch pricing ($2 / $10) was announced as introductory
+through 2026-08-31, but Anthropic made it the standard price. The planned
+2026-09-01 increase to $3 / $15 did not occur.
+
+Rate changes must be applied promptly because annotation stores the
+calculated USD cost rather than recalculating it at query time.
 
 Source of truth:
 
@@ -95,10 +101,10 @@ Source of truth:
 https://platform.claude.com/docs/en/about-claude/pricing
 ```
 
-The Fable and Mythos mappings intentionally match the `5` major family, so
-future model IDs such as `claude-fable-5.1` or `claude-fable-5-1-*` continue to
-use the Fable 5 rates. A future major version or an actual price change still
-requires a rate-card update.
+The Fable 5.1 / Mythos 5.1 check runs before the generic `fable-5` / `mythos-5`
+match, so IDs such as `claude-fable-5.1` or `claude-fable-5-1-*` pick up the
+discounted cache-read rate while `claude-fable-5` keeps the Fable 5 rates. A
+future minor version with different pricing still requires a rate-card update.
 
 ## Credit Formula
 
