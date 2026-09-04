@@ -145,11 +145,12 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-07-31:
+As of 2026-09-05, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
-| gpt-5.6 / gpt-5.6-sol | 125 | 12.5 | 750 |
+| gpt-6-astra | 250 | 25 | 1250 |
+| gpt-5.6 / gpt-5.6-sol | 100 | 10 | 500 |
 | gpt-5.6-terra | 50 | 5 | 300 |
 | gpt-5.6-luna | 5 | 0.5 | 30 |
 | gpt-5.5 | 125 | 12.5 | 750 |
@@ -162,6 +163,10 @@ As of 2026-07-31:
 | gpt-image-2 (text tokens) | 125 | 31.25 | 250 |
 
 Unknown models fall back to `gpt-5.6` / GPT-5.6 Sol rates.
+
+GPT-5.6 Sol's promotional pricing is available at least through 2026-11-21.
+Recheck the official rate card before changing those rates when the promotion
+ends.
 
 Codex OTLP completion events expose aggregate input, cached-input, and output
 token counts, but not the image/text token details needed to apply both
@@ -196,9 +201,9 @@ service_tier: Some(Some("priority"))
 
 The Java app does not estimate `service_tier` for annotated rows. `AnnotateJob`
 stores `service_tier = NULL` and computes credits at the standard rate, and
-`RateCard` carries no Fast multiplier. For reference, OpenAI's Codex speed docs
-put the Fast/priority surcharge at 2.5× for GPT-5.5 and 2× for GPT-5.4 (the only
-two models Fast supports); a future implementation would reintroduce that once a
+`RateCard` carries no Fast multiplier. OpenAI's pricing docs specify a 2.5× Fast
+multiplier for GPT-6 Astra, so Astra estimates here also use only the Standard
+rate. A future implementation would apply the model's Fast multiplier once a
 reliable per-turn tier source exists.
 
 Important precision boundary: reliable service-tier values are turn-level
@@ -212,7 +217,7 @@ surcharge. Until that is implemented, keep Fast surcharge out of credit totals.
 Source of truth:
 
 ```text
-https://developers.openai.com/codex/speed
+https://learn.chatgpt.com/docs/pricing#what-are-tokens-and-credits
 ```
 
 ## Trigger Classification

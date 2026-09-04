@@ -10,17 +10,31 @@ class RateCardTest {
     private final RateCard rateCard = new RateCard();
 
     @Test
+    void computesGpt6AstraCreditsAtStandardRate() {
+        RateCard.Credits credits = rateCard.compute(
+                " GPT-6-Astra ",
+                1_000_000L,
+                200_000L,
+                1_000_000L);
+
+        assertEquals(200, credits.input());
+        assertEquals(5, credits.cached());
+        assertEquals(1250, credits.output());
+        assertEquals(1455, credits.total());
+    }
+
+    @Test
     void mapsGpt56AliasAndVariants() {
-        assertArrayEquals(new double[]{125, 12.5, 750}, rateCard.rateFor("gpt-5.6"));
-        assertArrayEquals(new double[]{125, 12.5, 750}, rateCard.rateFor("gpt-5.6-sol"));
+        assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("gpt-5.6"));
+        assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("gpt-5.6-sol"));
         assertArrayEquals(new double[]{50, 5, 300}, rateCard.rateFor("gpt-5.6-terra"));
         assertArrayEquals(new double[]{5, 0.5, 30}, rateCard.rateFor("gpt-5.6-luna"));
     }
 
     @Test
     void fallsBackToGpt56SolRates() {
-        assertArrayEquals(new double[]{125, 12.5, 750}, rateCard.rateFor(null));
-        assertArrayEquals(new double[]{125, 12.5, 750}, rateCard.rateFor("future-model"));
+        assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor(null));
+        assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("future-model"));
     }
 
     @Test
