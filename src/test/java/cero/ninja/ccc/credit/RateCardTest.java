@@ -24,6 +24,12 @@ class RateCardTest {
     }
 
     @Test
+    void mapsGpt6SolAndLuna() {
+        assertArrayEquals(new double[]{50, 5, 250}, rateCard.rateFor("gpt-6-sol"));
+        assertArrayEquals(new double[]{2.5, 0.25, 12.5}, rateCard.rateFor(" GPT-6-Luna "));
+    }
+
+    @Test
     void mapsGpt56AliasAndVariants() {
         assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("gpt-5.6"));
         assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("gpt-5.6-sol"));
@@ -32,9 +38,9 @@ class RateCardTest {
     }
 
     @Test
-    void fallsBackToGpt56SolRates() {
-        assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor(null));
-        assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("future-model"));
+    void fallsBackToGpt6SolRates() {
+        assertArrayEquals(new double[]{50, 5, 250}, rateCard.rateFor(null));
+        assertArrayEquals(new double[]{50, 5, 250}, rateCard.rateFor("future-model"));
     }
 
     @Test

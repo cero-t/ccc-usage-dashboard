@@ -74,6 +74,30 @@ class ClaudeRateCardTest {
     }
 
     @Test
+    void computesOpus55CostsWithDiscountedCacheReads() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-opus-5-5",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(4.0, costs.input());
+        assertEquals(5.0, costs.cacheCreation());
+        assertEquals(0.2, costs.cacheRead());
+        assertEquals(20.0, costs.output());
+        assertEquals(29.2, costs.total());
+    }
+
+    @Test
+    void mapsOpus55VariantsWithoutAffectingOpus5() {
+        ClaudeRateCard.Rates expected = rateCard.rateFor("claude-opus-5-5");
+
+        assertEquals(expected, rateCard.rateFor("claude-opus-5.5"));
+        assertEquals(5.0, rateCard.rateFor("claude-opus-5").inputPerMt());
+    }
+
+    @Test
     void computesSonnet5StandardCosts() {
         ClaudeRateCard.Costs costs = rateCard.compute(
                 "claude-sonnet-5",

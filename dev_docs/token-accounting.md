@@ -71,12 +71,13 @@ cost_usd                = sum(component costs)
 
 The live table is `credit/ClaudeRateCard.java`.
 
-As of 2026-09-02:
+As of 2026-09-23:
 
 | model | input | 5m cache write | cache read | output |
 |---|---:|---:|---:|---:|
 | claude-fable-5.1 / claude-mythos-5.1 | $10 | $12.50 | $0.25 | $50 |
 | claude-fable-5 / claude-mythos-5 | $10 | $12.50 | $1 | $50 |
+| claude-opus-5.5 | $4 | $5 | $0.20 | $20 |
 | claude-opus-5 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4.5 through 4.8 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4 / 4.1 (legacy) | $15 | $18.75 | $1.50 | $75 |
@@ -86,7 +87,8 @@ As of 2026-09-02:
 | claude-haiku-3.5 (legacy) | $0.80 | $1 | $0.08 | $4 |
 
 Claude Fable 5.1 and Claude Mythos 5.1 price cache reads at 0.025x the base
-input rate; every other model uses the standard 0.1x multiplier.
+input rate, and Claude Opus 5.5 at 0.05x; every other model uses the standard
+0.1x multiplier.
 
 Claude Sonnet 5's launch pricing ($2 / $10) was announced as introductory
 through 2026-08-31, but Anthropic made it the standard price. The planned
@@ -105,6 +107,9 @@ The Fable 5.1 / Mythos 5.1 check runs before the generic `fable-5` / `mythos-5`
 match, so IDs such as `claude-fable-5.1` or `claude-fable-5-1-*` pick up the
 discounted cache-read rate while `claude-fable-5` keeps the Fable 5 rates. A
 future minor version with different pricing still requires a rate-card update.
+The same ordering applies to Claude Opus 5.5: the `opus-5-5` / `opus-5.5`
+check runs before the generic `opus-5` match, so `claude-opus-5-5` gets its own
+rates while `claude-opus-5` keeps the Opus 5 rates.
 
 ## Credit Formula
 
@@ -145,11 +150,13 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-09-05, in credits per 1M tokens at the Standard rate:
+As of 2026-09-23, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
 | gpt-6-astra | 250 | 25 | 1250 |
+| gpt-6-sol | 50 | 5 | 250 |
+| gpt-6-luna | 2.5 | 0.25 | 12.5 |
 | gpt-5.6 / gpt-5.6-sol | 100 | 10 | 500 |
 | gpt-5.6-terra | 50 | 5 | 300 |
 | gpt-5.6-luna | 5 | 0.5 | 30 |
@@ -162,7 +169,8 @@ As of 2026-09-05, in credits per 1M tokens at the Standard rate:
 | gpt-image-2 (image tokens) | 200 | 50 | 750 |
 | gpt-image-2 (text tokens) | 125 | 31.25 | 250 |
 
-Unknown models fall back to `gpt-5.6` / GPT-5.6 Sol rates.
+Unknown models fall back to `gpt-6-sol` / GPT-6 Sol rates, the current Codex
+default.
 
 GPT-5.6 Sol's promotional pricing is available at least through 2026-11-21.
 Recheck the official rate card before changing those rates when the promotion
@@ -202,9 +210,9 @@ service_tier: Some(Some("priority"))
 The Java app does not estimate `service_tier` for annotated rows. `AnnotateJob`
 stores `service_tier = NULL` and computes credits at the standard rate, and
 `RateCard` carries no Fast multiplier. OpenAI's pricing docs specify a 2.5× Fast
-multiplier for GPT-6 Astra, so Astra estimates here also use only the Standard
-rate. A future implementation would apply the model's Fast multiplier once a
-reliable per-turn tier source exists.
+multiplier for GPT-6 Astra, Sol, and Luna, so GPT-6 estimates here also use
+only the Standard rate. A future implementation would apply the model's Fast
+multiplier once a reliable per-turn tier source exists.
 
 Important precision boundary: reliable service-tier values are turn-level
 request-config signals in `logs_2`, while token-bearing OTLP completion rows do

@@ -12,9 +12,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class ClaudeRateCard {
 
-    // Fable 5.1 / Mythos 5.1 cache reads are 0.025x base input (all others 0.1x).
+    // Fable 5.1 / Mythos 5.1 cache reads are 0.025x base input, Opus 5.5 0.05x
+    // (all others 0.1x).
     private static final Rates FABLE_5_1 = new Rates(10.0, 12.50, 0.25, 50.0);
     private static final Rates FABLE_5 = new Rates(10.0, 12.50, 1.0, 50.0);
+    private static final Rates OPUS_5_5 = new Rates(4.0, 5.0, 0.20, 20.0);
     private static final Rates OPUS_5_AND_4_LATEST = new Rates(5.0, 6.25, 0.50, 25.0);
     private static final Rates OPUS_4_LEGACY = new Rates(15.0, 18.75, 1.50, 75.0);
     // Launched as introductory pricing; made the standard price (the planned
@@ -46,6 +48,9 @@ public class ClaudeRateCard {
         }
         if (m.contains("fable-5") || m.contains("mythos-5")) {
             return FABLE_5;
+        }
+        if (m.contains("opus-5-5") || m.contains("opus-5.5")) {
+            return OPUS_5_5;
         }
         if (m.contains("opus-5")
                 || m.contains("opus-4-8") || m.contains("opus-4.8")
