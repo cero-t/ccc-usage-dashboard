@@ -157,6 +157,34 @@ class AnnotateJobFeatureFlagsTest {
     }
 
     @Test
+    void appliesFastModeRatesToClaudeRequestsWithFastSpeed() {
+        insertRaw(60, """
+                {
+                  "observed_time_unix_nano": 1781208060000000000,
+                  "body": "api_request",
+                  "attributes": {
+                    "event.name": "api_request",
+                    "request_id": "claude-fast",
+                    "session.id": "claude-session-fast",
+                    "model": "claude-opus-5-5",
+                    "speed": "fast",
+                    "input_tokens": 1000000,
+                    "output_tokens": 1000000,
+                    "query_source": "user"
+                  },
+                  "resource_attributes": {
+                    "service.name": "claude-code",
+                    "host.name": "test-host"
+                  }
+                }
+                """);
+
+        annotateJob.run();
+
+        assertEquals(48.0, costUsdByRequest("claude-fast"));
+    }
+
+    @Test
     void configEndpointReflectsFeatureFlags() {
         given()
                 .when().get("/api/config")
@@ -239,6 +267,16 @@ class AnnotateJobFeatureFlagsTest {
                 """)
                 .param("request_id", requestId)
                 .query((rs, row) -> rs.getString(1))
+                .single();
+    }
+
+    private double costUsdByRequest(String requestId) {
+        return db.sql("""
+                SELECT cost_usd FROM annotated_events
+                WHERE request_id = :request_id
+                """)
+                .param("request_id", requestId)
+                .query((rs, row) -> rs.getDouble(1))
                 .single();
     }
 

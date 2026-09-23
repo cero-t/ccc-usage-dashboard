@@ -98,6 +98,63 @@ class ClaudeRateCardTest {
     }
 
     @Test
+    void computesOpus55FastModeCostsAtDoubleRates() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-opus-5-5",
+                "fast",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(8.0, costs.input());
+        assertEquals(10.0, costs.cacheCreation());
+        assertEquals(0.4, costs.cacheRead());
+        assertEquals(40.0, costs.output());
+        assertEquals(58.4, costs.total());
+    }
+
+    @Test
+    void computesOpus5FastModeCostsAtDoubleRates() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-opus-5",
+                " FAST ",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(10.0, costs.input());
+        assertEquals(12.5, costs.cacheCreation());
+        assertEquals(1.0, costs.cacheRead());
+        assertEquals(50.0, costs.output());
+        assertEquals(73.5, costs.total());
+    }
+
+    @Test
+    void appliesFastModeToOpus48() {
+        assertEquals(10.0, rateCard.rateFor("claude-opus-4-8", "fast").inputPerMt());
+        assertEquals(50.0, rateCard.rateFor("claude-opus-4-8", "fast").outputPerMt());
+    }
+
+    @Test
+    void keepsStandardRatesWhenSpeedIsNotFast() {
+        ClaudeRateCard.Rates standard = rateCard.rateFor("claude-opus-5-5");
+
+        assertEquals(standard, rateCard.rateFor("claude-opus-5-5", null));
+        assertEquals(standard, rateCard.rateFor("claude-opus-5-5", "normal"));
+        assertEquals(standard, rateCard.rateFor("claude-opus-5-5", "standard"));
+    }
+
+    @Test
+    void ignoresFastSpeedOnModelsWithoutFastMode() {
+        assertEquals(rateCard.rateFor("claude-opus-4-6"), rateCard.rateFor("claude-opus-4-6", "fast"));
+        assertEquals(rateCard.rateFor("claude-opus-4-7"), rateCard.rateFor("claude-opus-4-7", "fast"));
+        assertEquals(rateCard.rateFor("claude-sonnet-5"), rateCard.rateFor("claude-sonnet-5", "fast"));
+        assertEquals(rateCard.rateFor("claude-fable-5-1"), rateCard.rateFor("claude-fable-5-1", "fast"));
+    }
+
+    @Test
     void computesSonnet5StandardCosts() {
         ClaudeRateCard.Costs costs = rateCard.compute(
                 "claude-sonnet-5",

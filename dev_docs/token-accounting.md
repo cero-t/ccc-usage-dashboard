@@ -111,6 +111,31 @@ The same ordering applies to Claude Opus 5.5: the `opus-5-5` / `opus-5.5`
 check runs before the generic `opus-5` match, so `claude-opus-5-5` gets its own
 rates while `claude-opus-5` keeps the Opus 5 rates.
 
+### Claude Fast Mode
+
+Claude Code sets `speed = "fast"` on the `api_request` event when the request
+used fast mode, and omits it otherwise. `AnnotateJob` passes that value to
+`ClaudeRateCard`, which bills fast requests at 2x the standard rate on every
+token category. Prompt caching multipliers stack on top of fast mode pricing,
+so cache writes and cache reads double as well:
+
+| model | input | 5m cache write | cache read | output |
+|---|---:|---:|---:|---:|
+| claude-opus-5.5 (fast) | $8 | $10 | $0.40 | $40 |
+| claude-opus-5 / claude-opus-4.8 (fast) | $10 | $12.50 | $1 | $50 |
+
+Only Claude Opus 5.5, Claude Opus 5, and Claude Opus 4.8 support fast mode.
+Other models keep standard rates even when `speed = "fast"`: Claude Opus 4.6
+runs such requests at standard speed and bills them at standard rates, and
+Claude Opus 4.7 rejects them. The raw `speed` value is also stored in
+`service_tier` for Claude rows.
+
+Source of truth:
+
+```text
+https://platform.claude.com/docs/en/build-with-claude/fast-mode
+```
+
 ## Credit Formula
 
 `input_token_count` is the full input count. Cached input is a subset of it.
@@ -197,7 +222,10 @@ Source of truth:
 https://learn.chatgpt.com/docs/pricing#what-are-tokens-and-credits
 ```
 
-## Fast / Priority Tier
+## Codex Fast / Priority Tier
+
+Claude fast mode is covered in [Claude Fast Mode](#claude-fast-mode). This
+section is about Codex only.
 
 Codex OTLP does not export the service tier. `logs_2.sqlite` request/handler
 frames can carry values such as:

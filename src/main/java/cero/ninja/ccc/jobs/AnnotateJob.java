@@ -319,8 +319,9 @@ public class AnnotateJob {
         Long cachedTokens = sumNullable(cacheCreationTokens, cacheReadTokens);
         Long totalInputTokens = sumNullable(inputTokens, cacheCreationTokens, cacheReadTokens);
         String model = optString(attrs, "model");
+        String speed = optString(attrs, "speed");
         ClaudeRateCard.Costs costs = hasBillableClaudeTokens(inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens)
-                ? claudeRateCard.compute(model, inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens)
+                ? claudeRateCard.compute(model, speed, inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens)
                 : null;
         Double costUsd = costs == null ? reportedCostUsd : Double.valueOf(costs.total());
         String querySource = optString(attrs, "query_source");
@@ -344,7 +345,7 @@ public class AnnotateJob {
                 .param("thread_source", firstNonBlank(optString(attrs, "app.entrypoint"), serviceName))
                 .param("thread_title", null)
                 .param("thread_cwd", null)
-                .param("service_tier", firstNonBlank(optString(attrs, "speed"), optString(attrs, "service_tier")))
+                .param("service_tier", firstNonBlank(speed, optString(attrs, "service_tier")))
                 .param("rate_model", model)
                 .param("input_credits", null)
                 .param("cached_credits", null)
