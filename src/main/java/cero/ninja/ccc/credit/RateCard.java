@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * OpenAI Codex rate card — credits per 1M tokens as {input, cached, output}.
- * Verified 2026-09-23 against https://learn.chatgpt.com/docs/pricing — it changes.
+ * Verified 2026-09-29 against https://learn.chatgpt.com/docs/pricing — it changes.
  *
  * <p>One request's credits are additive over three components:
  * <pre>
@@ -26,6 +26,7 @@ public class RateCard {
 
     private static final Map<String, double[]> RATES = Map.ofEntries(
             Map.entry("gpt-6-astra", new double[]{250, 25, 1250}),
+            Map.entry("gpt-6.1-sol", new double[]{50, 2.5, 250}),
             Map.entry("gpt-6-sol", new double[]{50, 5, 250}),
             Map.entry("gpt-6-luna", new double[]{2.5, 0.25, 12.5}),
             // Sol promotional pricing is available at least through 2026-11-21.
@@ -47,7 +48,7 @@ public class RateCard {
             Map.entry("gpt-image-2-2026-04-21", new double[]{200, 50, 750})
     );
 
-    // Unrecognized model is billed at the current GPT-6 Sol rate (the Codex default).
+    // Unrecognized model is billed at the GPT-6 Sol rate.
     private static final double[] FALLBACK = RATES.get("gpt-6-sol");
 
     public double[] rateFor(String model) {

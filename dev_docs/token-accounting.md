@@ -175,27 +175,31 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-09-23, in credits per 1M tokens at the Standard rate:
+As of 2026-09-29, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
 | gpt-6-astra | 250 | 25 | 1250 |
+| gpt-6.1-sol | 50 | 2.5 | 250 |
 | gpt-6-sol | 50 | 5 | 250 |
 | gpt-6-luna | 2.5 | 0.25 | 12.5 |
 | gpt-5.6 / gpt-5.6-sol | 100 | 10 | 500 |
 | gpt-5.6-terra | 50 | 5 | 300 |
 | gpt-5.6-luna | 5 | 0.5 | 30 |
 | gpt-5.5 | 125 | 12.5 | 750 |
-| gpt-5.4 | 62.5 | 6.25 | 375 |
-| gpt-5.4-mini | 18.75 | 1.875 | 113 |
+| gpt-5.4 (historical) | 62.5 | 6.25 | 375 |
+| gpt-5.4-mini (historical) | 18.75 | 1.875 | 113 |
 | gpt-5.3-codex-spark | research preview | research preview | research preview |
 | gpt-5.3-codex (historical) | 43.75 | 4.375 | 350 |
 | gpt-5.2 (historical) | 43.75 | 4.375 | 350 |
 | gpt-image-2 (image tokens) | 200 | 50 | 750 |
 | gpt-image-2 (text tokens) | 125 | 31.25 | 250 |
 
-Unknown models fall back to `gpt-6-sol` / GPT-6 Sol rates, the current Codex
-default.
+Unknown models fall back to `gpt-6-sol` / GPT-6 Sol rates.
+
+GPT-5.4 and GPT-5.4 mini no longer appear on the official rate card; they
+retired from Codex with ChatGPT sign-in on 2026-08-31. Their last published
+rates stay in `RateCard` so historical rows keep their estimates.
 
 GPT-5.6 Sol's promotional pricing is available at least through 2026-11-21.
 Recheck the official rate card before changing those rates when the promotion
@@ -237,10 +241,12 @@ service_tier: Some(Some("priority"))
 
 The Java app does not estimate `service_tier` for annotated rows. `AnnotateJob`
 stores `service_tier = NULL` and computes credits at the standard rate, and
-`RateCard` carries no Fast multiplier. OpenAI's pricing docs specify a 2.5× Fast
-multiplier for GPT-6 Astra, Sol, and Luna, so GPT-6 estimates here also use
-only the Standard rate. A future implementation would apply the model's Fast
-multiplier once a reliable per-turn tier source exists.
+`RateCard` carries no Fast multiplier. OpenAI's pricing docs specify Fast at
+2.5× the Standard rate for included subscription usage and 2× for purchased
+credits and Enterprise pay-as-you-go usage, and GPT-6 Astra Ultrafast at 8× and
+6× respectively. GPT-6 estimates here still use only the Standard rate. A
+future implementation would apply the multiplier for the turn's speed mode and
+billing type once a reliable per-turn tier source exists.
 
 Important precision boundary: reliable service-tier values are turn-level
 request-config signals in `logs_2`, while token-bearing OTLP completion rows do
