@@ -95,7 +95,8 @@ public class DashboardApi {
             Double usedPercent,
             Double remainingPercent,
             Long resetsAt,
-            String sampledAt) {}
+            String sampledAt,
+            Long sampledAtUnixSeconds) {}
 
     @RegisterForReflection
     public record ModelCredits(
@@ -605,7 +606,8 @@ public class DashboardApi {
                        used_percent,
                        remaining_percent,
                        resets_at,
-                       datetime(sampled_at, 'localtime')  AS sampled_at
+                       datetime(sampled_at, 'localtime') AS sampled_at,
+                       CAST(strftime('%s', sampled_at) AS INTEGER) AS sampled_at_unix_seconds
                 FROM usage_samples
                 WHERE id IN (SELECT max(id) FROM usage_samples GROUP BY window)
                   AND used_percent IS NOT NULL
