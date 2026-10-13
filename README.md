@@ -22,6 +22,13 @@ The screenshots below show a 12-hour range at 5-minute grain.
 
 ![Claude Code dashboard charts for a 12-hour range at 5-minute grain](docs/assets/claude-dashboard-12h-5m.jpg)
 
+## Live terminal sessions (this fork)
+
+This fork adds per-session context/status for interactive Claude Code and Codex
+terminals, with 5-hour and weekly subscription gauges. See
+[Live terminal sessions](docs/live-terminal-sessions.md) for collector setup,
+footer integration, freshness semantics, and validation.
+
 ## Requirements
 
 - Codex tab: Codex OTLP export configured (see
