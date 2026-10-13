@@ -152,6 +152,7 @@ class ClaudeRateCardTest {
         assertEquals(rateCard.rateFor("claude-opus-4-7"), rateCard.rateFor("claude-opus-4-7", "fast"));
         assertEquals(rateCard.rateFor("claude-sonnet-5"), rateCard.rateFor("claude-sonnet-5", "fast"));
         assertEquals(rateCard.rateFor("claude-fable-5-1"), rateCard.rateFor("claude-fable-5-1", "fast"));
+        assertEquals(rateCard.rateFor("claude-haiku-5-5"), rateCard.rateFor("claude-haiku-5-5", "fast"));
     }
 
     @Test
@@ -168,6 +169,83 @@ class ClaudeRateCardTest {
         assertEquals(0.2, costs.cacheRead());
         assertEquals(10.0, costs.output());
         assertEquals(14.7, costs.total());
+    }
+
+    @Test
+    void computesSonnet55CostsWithDiscountedCacheReads() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-sonnet-5-5",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(2.0, costs.input());
+        assertEquals(2.5, costs.cacheCreation());
+        assertEquals(0.1, costs.cacheRead());
+        assertEquals(10.0, costs.output());
+        assertEquals(14.6, costs.total());
+    }
+
+    @Test
+    void mapsSonnet55VariantsWithoutAffectingSonnet5() {
+        ClaudeRateCard.Rates expected = rateCard.rateFor("claude-sonnet-5-5");
+
+        assertEquals(0.1, expected.cacheReadPerMt());
+        assertEquals(expected, rateCard.rateFor("claude-sonnet-5.5"));
+        assertEquals(0.2, rateCard.rateFor("claude-sonnet-5").cacheReadPerMt());
+    }
+
+    @Test
+    void computesHaiku55ShortPromptCosts() {
+        // Exactly 100,000 prompt tokens is still the short-prompt row.
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-haiku-5-5",
+                50_000L,
+                20_000L,
+                30_000L,
+                10_000L);
+
+        assertEquals(0.005, costs.input());
+        assertEquals(0.0025, costs.cacheCreation());
+        assertEquals(0.0003, costs.cacheRead());
+        assertEquals(0.005, costs.output());
+        assertEquals(0.0128, costs.total());
+    }
+
+    @Test
+    void computesHaiku55LongPromptCostsAtHigherRates() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-haiku-5-5",
+                1_000_000L,
+                0L,
+                0L,
+                1_000_000L);
+
+        assertEquals(0.5, costs.input());
+        assertEquals(2.5, costs.output());
+        assertEquals(3.0, costs.total());
+    }
+
+    @Test
+    void countsCacheTokensTowardHaiku55PromptLength() {
+        // No uncached input, but 200k cache reads put the prompt over 100k tokens.
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-haiku-5-5",
+                0L,
+                0L,
+                200_000L,
+                0L);
+
+        assertEquals(0.01, costs.cacheRead());
+        assertEquals(0.01, costs.total());
+    }
+
+    @Test
+    void selectsHaiku55RowByPromptLengthThreshold() {
+        assertEquals(0.10, rateCard.rateFor("claude-haiku-5-5", null, 100_000).inputPerMt());
+        assertEquals(0.50, rateCard.rateFor("claude-haiku-5.5", null, 100_001).inputPerMt());
+        assertEquals(0.10, rateCard.rateFor("claude-haiku-5-5").inputPerMt());
     }
 
     @Test

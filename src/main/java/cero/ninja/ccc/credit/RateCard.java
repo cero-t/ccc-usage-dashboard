@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * OpenAI Codex rate card — credits per 1M tokens as {input, cached, output}.
- * Verified 2026-09-29 against https://learn.chatgpt.com/docs/pricing — it changes.
+ * Verified 2026-10-13 against https://learn.chatgpt.com/docs/pricing — it changes.
  *
  * <p>One request's credits are additive over three components:
  * <pre>

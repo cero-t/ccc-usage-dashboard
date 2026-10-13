@@ -71,7 +71,7 @@ cost_usd                = sum(component costs)
 
 The live table is `credit/ClaudeRateCard.java`.
 
-As of 2026-09-23:
+As of 2026-10-13:
 
 | model | input | 5m cache write | cache read | output |
 |---|---:|---:|---:|---:|
@@ -81,14 +81,25 @@ As of 2026-09-23:
 | claude-opus-5 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4.5 through 4.8 | $5 | $6.25 | $0.50 | $25 |
 | claude-opus-4 / 4.1 (legacy) | $15 | $18.75 | $1.50 | $75 |
+| claude-sonnet-5.5 | $2 | $2.50 | $0.10 | $10 |
 | claude-sonnet-5 | $2 | $2.50 | $0.20 | $10 |
 | claude-sonnet-4 through 4.6 | $3 | $3.75 | $0.30 | $15 |
+| claude-haiku-5.5 (prompt up to 100,000 tokens) | $0.10 | $0.125 | $0.01 | $0.50 |
+| claude-haiku-5.5 (prompt over 100,000 tokens) | $0.50 | $0.625 | $0.05 | $2.50 |
 | claude-haiku-4.5 | $1 | $1.25 | $0.10 | $5 |
 | claude-haiku-3.5 (legacy) | $0.80 | $1 | $0.08 | $4 |
 
 Claude Fable 5.1 and Claude Mythos 5.1 price cache reads at 0.025x the base
-input rate, and Claude Opus 5.5 at 0.05x; every other model uses the standard
-0.1x multiplier.
+input rate, and Claude Opus 5.5 and Claude Sonnet 5.5 at 0.05x; every other
+model uses the standard 0.1x multiplier.
+
+Claude Haiku 5.5 is priced by prompt length. A request's prompt length is the
+sum of its `input_tokens`, `cache_creation_tokens`, and `cache_read_tokens`; a
+request whose prompt exceeds 100,000 tokens pays the higher row for every token
+category, and each request is priced on its own. `ClaudeRateCard` selects the
+row from those three counts at annotation time. Claude Code's `haiku` alias
+resolves to Haiku 5.5 on the Anthropic API, so background requests such as
+session titles commonly land on these rows.
 
 Claude Sonnet 5's launch pricing ($2 / $10) was announced as introductory
 through 2026-08-31, but Anthropic made it the standard price. The planned
@@ -107,9 +118,10 @@ The Fable 5.1 / Mythos 5.1 check runs before the generic `fable-5` / `mythos-5`
 match, so IDs such as `claude-fable-5.1` or `claude-fable-5-1-*` pick up the
 discounted cache-read rate while `claude-fable-5` keeps the Fable 5 rates. A
 future minor version with different pricing still requires a rate-card update.
-The same ordering applies to Claude Opus 5.5: the `opus-5-5` / `opus-5.5`
-check runs before the generic `opus-5` match, so `claude-opus-5-5` gets its own
-rates while `claude-opus-5` keeps the Opus 5 rates.
+The same ordering applies to Claude Opus 5.5 and Claude Sonnet 5.5: the
+`opus-5-5` / `opus-5.5` and `sonnet-5-5` / `sonnet-5.5` checks run before the
+generic `opus-5` and `sonnet-5` matches, so the 5.5 models get their own rates
+while `claude-opus-5` and `claude-sonnet-5` keep theirs.
 
 ### Claude Fast Mode
 
@@ -175,7 +187,7 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-09-29, in credits per 1M tokens at the Standard rate:
+As of 2026-10-13, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
@@ -243,10 +255,10 @@ The Java app does not estimate `service_tier` for annotated rows. `AnnotateJob`
 stores `service_tier = NULL` and computes credits at the standard rate, and
 `RateCard` carries no Fast multiplier. OpenAI's pricing docs specify Fast at
 2.5× the Standard rate for included subscription usage and 2× for purchased
-credits and Enterprise pay-as-you-go usage, and GPT-6 Astra Ultrafast at 8× and
-6× respectively. GPT-6 estimates here still use only the Standard rate. A
-future implementation would apply the multiplier for the turn's speed mode and
-billing type once a reliable per-turn tier source exists.
+credits and Enterprise pay-as-you-go usage, and Ultrafast on GPT-6 Astra and
+GPT-6.1 Sol at 8× and 6× respectively. GPT-6 estimates here still use only the
+Standard rate. A future implementation would apply the multiplier for the
+turn's speed mode and billing type once a reliable per-turn tier source exists.
 
 Important precision boundary: reliable service-tier values are turn-level
 request-config signals in `logs_2`, while token-bearing OTLP completion rows do

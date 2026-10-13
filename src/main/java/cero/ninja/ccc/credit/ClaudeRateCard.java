@@ -13,21 +13,30 @@ import jakarta.enterprise.context.ApplicationScoped;
  * event) bills every token category at {@link #FAST_MODE_MULTIPLIER}x the
  * standard rate on the models that support it; prompt caching multipliers
  * stack on top, so the whole rate row scales.
+ *
+ * <p>Claude Haiku 5.5 is priced by prompt length. A request's prompt length is
+ * the sum of its uncached input, cache write and cache read tokens; a request
+ * over {@link #HAIKU_5_5_LONG_PROMPT_THRESHOLD} tokens pays the higher row for
+ * every token category, and each request is priced on its own.
  */
 @ApplicationScoped
 public class ClaudeRateCard {
 
-    // Fable 5.1 / Mythos 5.1 cache reads are 0.025x base input, Opus 5.5 0.05x
-    // (all others 0.1x).
+    // Fable 5.1 / Mythos 5.1 cache reads are 0.025x base input, Opus 5.5 and
+    // Sonnet 5.5 0.05x (all others 0.1x).
     private static final Rates FABLE_5_1 = new Rates(10.0, 12.50, 0.25, 50.0);
     private static final Rates FABLE_5 = new Rates(10.0, 12.50, 1.0, 50.0);
     private static final Rates OPUS_5_5 = new Rates(4.0, 5.0, 0.20, 20.0);
     private static final Rates OPUS_5_AND_4_LATEST = new Rates(5.0, 6.25, 0.50, 25.0);
     private static final Rates OPUS_4_LEGACY = new Rates(15.0, 18.75, 1.50, 75.0);
+    private static final Rates SONNET_5_5 = new Rates(2.0, 2.50, 0.10, 10.0);
     // Launched as introductory pricing; made the standard price (the planned
     // 2026-09-01 increase to $3 / $15 was cancelled).
     private static final Rates SONNET_5 = new Rates(2.0, 2.50, 0.20, 10.0);
     private static final Rates SONNET_4 = new Rates(3.0, 3.75, 0.30, 15.0);
+    static final long HAIKU_5_5_LONG_PROMPT_THRESHOLD = 100_000;
+    private static final Rates HAIKU_5_5 = new Rates(0.10, 0.125, 0.01, 0.50);
+    private static final Rates HAIKU_5_5_LONG_PROMPT = new Rates(0.50, 0.625, 0.05, 2.50);
     private static final Rates HAIKU_4_5 = new Rates(1.0, 1.25, 0.10, 5.0);
     private static final Rates HAIKU_3_5 = new Rates(0.80, 1.0, 0.08, 4.0);
 
@@ -40,7 +49,8 @@ public class ClaudeRateCard {
 
     public Costs compute(String model, String speed, Long inputTokens, Long cacheCreationTokens,
                          Long cacheReadTokens, Long outputTokens) {
-        Rates rates = rateFor(model, speed);
+        long promptTokens = count(inputTokens) + count(cacheCreationTokens) + count(cacheReadTokens);
+        Rates rates = rateFor(model, speed, promptTokens);
         double input = usd(inputTokens, rates.inputPerMt());
         double cacheCreation = usd(cacheCreationTokens, rates.cacheWrite5mPerMt());
         double cacheRead = usd(cacheReadTokens, rates.cacheReadPerMt());
@@ -50,10 +60,17 @@ public class ClaudeRateCard {
     }
 
     public Rates rateFor(String model, String speed) {
-        Rates rates = rateFor(model);
+        return rateFor(model, speed, 0);
+    }
+
+    public Rates rateFor(String model, String speed, long promptTokens) {
+        Rates rates = isHaiku55(model) && promptTokens > HAIKU_5_5_LONG_PROMPT_THRESHOLD
+                ? HAIKU_5_5_LONG_PROMPT
+                : rateFor(model);
         return isFast(speed) && supportsFastMode(model) ? rates.times(FAST_MODE_MULTIPLIER) : rates;
     }
 
+    /** Standard-speed rates; for Haiku 5.5 this is the short-prompt row. */
     public Rates rateFor(String model) {
         if (model == null || model.isBlank()) {
             return FABLE_5;
@@ -79,11 +96,17 @@ public class ClaudeRateCard {
         if (m.contains("opus-4-1") || m.contains("opus-4.1") || m.contains("opus-4")) {
             return OPUS_4_LEGACY;
         }
+        if (m.contains("sonnet-5-5") || m.contains("sonnet-5.5")) {
+            return SONNET_5_5;
+        }
         if (m.contains("sonnet-5")) {
             return SONNET_5;
         }
         if (m.contains("sonnet-4")) {
             return SONNET_4;
+        }
+        if (isHaiku55(m)) {
+            return HAIKU_5_5;
         }
         if (m.contains("haiku-4-5") || m.contains("haiku-4.5")) {
             return HAIKU_4_5;
@@ -92,6 +115,14 @@ public class ClaudeRateCard {
             return HAIKU_3_5;
         }
         return FABLE_5;
+    }
+
+    private static boolean isHaiku55(String model) {
+        if (model == null) {
+            return false;
+        }
+        String m = model.strip().toLowerCase();
+        return m.contains("haiku-5-5") || m.contains("haiku-5.5");
     }
 
     private static boolean isFast(String speed) {
@@ -108,9 +139,12 @@ public class ClaudeRateCard {
         return m.contains("opus-5") || m.contains("opus-4-8") || m.contains("opus-4.8");
     }
 
+    private static long count(Long tokens) {
+        return tokens == null ? 0 : tokens;
+    }
+
     private static double usd(Long tokens, double usdPerMt) {
-        long t = tokens == null ? 0 : tokens;
-        return round(t * usdPerMt / 1_000_000.0);
+        return round(count(tokens) * usdPerMt / 1_000_000.0);
     }
 
     private static double round(double value) {
