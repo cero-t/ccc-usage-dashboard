@@ -44,6 +44,20 @@ class RateCardTest {
     }
 
     @Test
+    void computesGpt61TerraCredits() {
+        RateCard.Credits credits = rateCard.compute(
+                "gpt-6.1-terra",
+                1_000_000L,
+                800_000L,
+                1_000_000L);
+
+        assertEquals(5, credits.input());
+        assertEquals(1, credits.cached());
+        assertEquals(125, credits.output());
+        assertEquals(131, credits.total());
+    }
+
+    @Test
     void mapsGpt56AliasAndVariants() {
         assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("gpt-5.6"));
         assertArrayEquals(new double[]{100, 10, 500}, rateCard.rateFor("gpt-5.6-sol"));

@@ -187,18 +187,19 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-10-13, in credits per 1M tokens at the Standard rate:
+As of 2026-10-27, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
 | gpt-6-astra | 250 | 25 | 1250 |
 | gpt-6.1-sol | 50 | 2.5 | 250 |
+| gpt-6.1-terra | 25 | 1.25 | 125 |
 | gpt-6-sol | 50 | 5 | 250 |
 | gpt-6-luna | 2.5 | 0.25 | 12.5 |
 | gpt-5.6 / gpt-5.6-sol | 100 | 10 | 500 |
 | gpt-5.6-terra | 50 | 5 | 300 |
 | gpt-5.6-luna | 5 | 0.5 | 30 |
-| gpt-5.5 | 125 | 12.5 | 750 |
+| gpt-5.5 (historical) | 125 | 12.5 | 750 |
 | gpt-5.4 (historical) | 62.5 | 6.25 | 375 |
 | gpt-5.4-mini (historical) | 18.75 | 1.875 | 113 |
 | gpt-5.3-codex-spark | research preview | research preview | research preview |
@@ -209,9 +210,10 @@ As of 2026-10-13, in credits per 1M tokens at the Standard rate:
 
 Unknown models fall back to `gpt-6-sol` / GPT-6 Sol rates.
 
-GPT-5.4 and GPT-5.4 mini no longer appear on the official rate card; they
-retired from Codex with ChatGPT sign-in on 2026-08-31. Their last published
-rates stay in `RateCard` so historical rows keep their estimates.
+GPT-5.4, GPT-5.4 mini, and GPT-5.5 no longer appear on the official rate card;
+GPT-5.4 and GPT-5.4 mini retired from Codex with ChatGPT sign-in on 2026-08-31,
+and GPT-5.5 on 2026-10-14. Their last published rates stay in `RateCard` so
+historical rows keep their estimates.
 
 GPT-5.6 Sol's promotional pricing is available at least through 2026-11-21.
 Recheck the official rate card before changing those rates when the promotion
