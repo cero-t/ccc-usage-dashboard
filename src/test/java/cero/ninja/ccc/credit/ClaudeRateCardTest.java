@@ -25,6 +25,58 @@ class ClaudeRateCardTest {
     }
 
     @Test
+    void computesFable52Costs() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-fable-5-2",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(8.0, costs.input());
+        assertEquals(10.0, costs.cacheCreation());
+        assertEquals(0.2, costs.cacheRead());
+        assertEquals(40.0, costs.output());
+        assertEquals(58.2, costs.total());
+    }
+
+    @Test
+    void mapsFable52AndMythos52VariantsWithoutAffectingEarlierFable() {
+        ClaudeRateCard.Rates expected = rateCard.rateFor("claude-fable-5-2");
+
+        assertEquals(8.0, expected.inputPerMt());
+        assertEquals(expected, rateCard.rateFor("claude-fable-5.2"));
+        assertEquals(expected, rateCard.rateFor("claude-mythos-5-2"));
+        assertEquals(expected, rateCard.rateFor("claude-mythos-5.2"));
+        assertEquals(10.0, rateCard.rateFor("claude-fable-5-1").inputPerMt());
+        assertEquals(0.25, rateCard.rateFor("claude-fable-5-1").cacheReadPerMt());
+        assertEquals(1.0, rateCard.rateFor("claude-fable-5").cacheReadPerMt());
+    }
+
+    @Test
+    void computesFable52FastModeCostsAtDoubleRates() {
+        ClaudeRateCard.Costs costs = rateCard.compute(
+                "claude-fable-5-2",
+                "fast",
+                1_000_000L,
+                1_000_000L,
+                1_000_000L,
+                1_000_000L);
+
+        assertEquals(16.0, costs.input());
+        assertEquals(20.0, costs.cacheCreation());
+        assertEquals(0.4, costs.cacheRead());
+        assertEquals(80.0, costs.output());
+        assertEquals(116.4, costs.total());
+    }
+
+    @Test
+    void appliesFastModeToMythos52() {
+        assertEquals(16.0, rateCard.rateFor("claude-mythos-5-2", "fast").inputPerMt());
+        assertEquals(80.0, rateCard.rateFor("claude-mythos-5-2", "fast").outputPerMt());
+    }
+
+    @Test
     void computesFable51CostsWithDiscountedCacheReads() {
         ClaudeRateCard.Costs costs = rateCard.compute(
                 "claude-fable-5-1",
@@ -152,6 +204,7 @@ class ClaudeRateCardTest {
         assertEquals(rateCard.rateFor("claude-opus-4-7"), rateCard.rateFor("claude-opus-4-7", "fast"));
         assertEquals(rateCard.rateFor("claude-sonnet-5"), rateCard.rateFor("claude-sonnet-5", "fast"));
         assertEquals(rateCard.rateFor("claude-fable-5-1"), rateCard.rateFor("claude-fable-5-1", "fast"));
+        assertEquals(rateCard.rateFor("claude-fable-5"), rateCard.rateFor("claude-fable-5", "fast"));
         assertEquals(rateCard.rateFor("claude-haiku-5-5"), rateCard.rateFor("claude-haiku-5-5", "fast"));
     }
 

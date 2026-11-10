@@ -71,10 +71,11 @@ cost_usd                = sum(component costs)
 
 The live table is `credit/ClaudeRateCard.java`.
 
-As of 2026-10-13:
+As of 2026-11-10:
 
 | model | input | 5m cache write | cache read | output |
 |---|---:|---:|---:|---:|
+| claude-fable-5.2 / claude-mythos-5.2 | $8 | $10 | $0.20 | $40 |
 | claude-fable-5.1 / claude-mythos-5.1 | $10 | $12.50 | $0.25 | $50 |
 | claude-fable-5 / claude-mythos-5 | $10 | $12.50 | $1 | $50 |
 | claude-opus-5.5 | $4 | $5 | $0.20 | $20 |
@@ -89,9 +90,13 @@ As of 2026-10-13:
 | claude-haiku-4.5 | $1 | $1.25 | $0.10 | $5 |
 | claude-haiku-3.5 (legacy) | $0.80 | $1 | $0.08 | $4 |
 
-Claude Fable 5.1 and Claude Mythos 5.1 price cache reads at 0.025x the base
-input rate, and Claude Opus 5.5 and Claude Sonnet 5.5 at 0.05x; every other
-model uses the standard 0.1x multiplier.
+Claude Fable 5.2, Claude Mythos 5.2, Claude Fable 5.1, and Claude Mythos 5.1
+price cache reads at 0.025x the base input rate, and Claude Opus 5.5 and Claude
+Sonnet 5.5 at 0.05x; every other model uses the standard 0.1x multiplier.
+
+Claude Haiku 3.5 no longer appears on the official pricing page. Its last
+published rates stay in `ClaudeRateCard` so historical rows keep their
+estimates.
 
 Claude Haiku 5.5 is priced by prompt length. A request's prompt length is the
 sum of its `input_tokens`, `cache_creation_tokens`, and `cache_read_tokens`; a
@@ -114,10 +119,12 @@ Source of truth:
 https://platform.claude.com/docs/en/about-claude/pricing
 ```
 
-The Fable 5.1 / Mythos 5.1 check runs before the generic `fable-5` / `mythos-5`
-match, so IDs such as `claude-fable-5.1` or `claude-fable-5-1-*` pick up the
-discounted cache-read rate while `claude-fable-5` keeps the Fable 5 rates. A
-future minor version with different pricing still requires a rate-card update.
+The Fable 5.2 / Mythos 5.2 and Fable 5.1 / Mythos 5.1 checks run before the
+generic `fable-5` / `mythos-5` match, so IDs such as `claude-fable-5-2`,
+`claude-fable-5.1`, or `claude-fable-5-1-*` pick up their own rates while
+`claude-fable-5` keeps the Fable 5 rates. A future minor version with different
+pricing still requires a rate-card update: until then it falls through to the
+generic match and is estimated at the Fable 5 rates.
 The same ordering applies to Claude Opus 5.5 and Claude Sonnet 5.5: the
 `opus-5-5` / `opus-5.5` and `sonnet-5-5` / `sonnet-5.5` checks run before the
 generic `opus-5` and `sonnet-5` matches, so the 5.5 models get their own rates
@@ -133,10 +140,13 @@ so cache writes and cache reads double as well:
 
 | model | input | 5m cache write | cache read | output |
 |---|---:|---:|---:|---:|
+| claude-fable-5.2 / claude-mythos-5.2 (fast) | $16 | $20 | $0.40 | $80 |
 | claude-opus-5.5 (fast) | $8 | $10 | $0.40 | $40 |
 | claude-opus-5 / claude-opus-4.8 (fast) | $10 | $12.50 | $1 | $50 |
 
-Only Claude Opus 5.5, Claude Opus 5, and Claude Opus 4.8 support fast mode.
+Only Claude Fable 5.2, Claude Mythos 5.2, Claude Opus 5.5, Claude Opus 5, and
+Claude Opus 4.8 support fast mode. Fast mode on Claude Opus 4.8 is deprecated
+and will be removed on 2026-11-30, after which the API rejects such requests.
 Other models keep standard rates even when `speed = "fast"`: Claude Opus 4.6
 runs such requests at standard speed and bills them at standard rates, and
 Claude Opus 4.7 rejects them. The raw `speed` value is also stored in
@@ -187,7 +197,7 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-10-27, in credits per 1M tokens at the Standard rate:
+As of 2026-11-10, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|

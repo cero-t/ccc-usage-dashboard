@@ -22,8 +22,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class ClaudeRateCard {
 
-    // Fable 5.1 / Mythos 5.1 cache reads are 0.025x base input, Opus 5.5 and
-    // Sonnet 5.5 0.05x (all others 0.1x).
+    // Fable 5.2 / 5.1 and Mythos 5.2 / 5.1 cache reads are 0.025x base input,
+    // Opus 5.5 and Sonnet 5.5 0.05x (all others 0.1x).
+    private static final Rates FABLE_5_2 = new Rates(8.0, 10.0, 0.20, 40.0);
     private static final Rates FABLE_5_1 = new Rates(10.0, 12.50, 0.25, 50.0);
     private static final Rates FABLE_5 = new Rates(10.0, 12.50, 1.0, 50.0);
     private static final Rates OPUS_5_5 = new Rates(4.0, 5.0, 0.20, 20.0);
@@ -76,6 +77,9 @@ public class ClaudeRateCard {
             return FABLE_5;
         }
         String m = model.strip().toLowerCase();
+        if (isFable52(m)) {
+            return FABLE_5_2;
+        }
         if (m.contains("fable-5-1") || m.contains("fable-5.1")
                 || m.contains("mythos-5-1") || m.contains("mythos-5.1")) {
             return FABLE_5_1;
@@ -117,6 +121,15 @@ public class ClaudeRateCard {
         return FABLE_5;
     }
 
+    private static boolean isFable52(String model) {
+        if (model == null) {
+            return false;
+        }
+        String m = model.strip().toLowerCase();
+        return m.contains("fable-5-2") || m.contains("fable-5.2")
+                || m.contains("mythos-5-2") || m.contains("mythos-5.2");
+    }
+
     private static boolean isHaiku55(String model) {
         if (model == null) {
             return false;
@@ -129,14 +142,16 @@ public class ClaudeRateCard {
         return speed != null && speed.strip().equalsIgnoreCase("fast");
     }
 
-    // Fast mode runs on Opus 5.5, Opus 5 and Opus 4.8 only. Opus 4.6 requests
-    // asking for fast mode run and bill at standard speed.
+    // Fast mode runs on Fable 5.2, Mythos 5.2, Opus 5.5, Opus 5 and Opus 4.8
+    // only. Opus 4.6 requests asking for fast mode run and bill at standard
+    // speed.
     private static boolean supportsFastMode(String model) {
         if (model == null) {
             return false;
         }
         String m = model.strip().toLowerCase();
-        return m.contains("opus-5") || m.contains("opus-4-8") || m.contains("opus-4.8");
+        return isFable52(m)
+                || m.contains("opus-5") || m.contains("opus-4-8") || m.contains("opus-4.8");
     }
 
     private static long count(Long tokens) {
