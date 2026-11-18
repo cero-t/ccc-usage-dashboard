@@ -24,6 +24,27 @@ class RateCardTest {
     }
 
     @Test
+    void computesGpt62AstraCredits() {
+        RateCard.Credits credits = rateCard.compute(
+                "gpt-6.2-astra",
+                1_000_000L,
+                800_000L,
+                1_000_000L);
+
+        assertEquals(40, credits.input());
+        assertEquals(8, credits.cached());
+        assertEquals(1000, credits.output());
+        assertEquals(1048, credits.total());
+    }
+
+    @Test
+    void mapsGpt62SolWithoutAffectingGpt6Models() {
+        assertArrayEquals(new double[]{50, 2.5, 250}, rateCard.rateFor(" GPT-6.2-Sol "));
+        assertArrayEquals(new double[]{250, 25, 1250}, rateCard.rateFor("gpt-6-astra"));
+        assertArrayEquals(new double[]{50, 5, 250}, rateCard.rateFor("gpt-6-sol"));
+    }
+
+    @Test
     void mapsGpt6SolAndLuna() {
         assertArrayEquals(new double[]{50, 5, 250}, rateCard.rateFor("gpt-6-sol"));
         assertArrayEquals(new double[]{2.5, 0.25, 12.5}, rateCard.rateFor(" GPT-6-Luna "));

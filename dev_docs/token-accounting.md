@@ -197,11 +197,13 @@ use the same source-specific token expression. Cost mode uses the stored
 
 The live table is `credit/RateCard.java`.
 
-As of 2026-11-10, in credits per 1M tokens at the Standard rate:
+As of 2026-11-18, in credits per 1M tokens at the Standard rate:
 
 | model | input | cached input | output |
 |---|---:|---:|---:|
+| gpt-6.2-astra | 200 | 10 | 1000 |
 | gpt-6-astra | 250 | 25 | 1250 |
+| gpt-6.2-sol | 50 | 2.5 | 250 |
 | gpt-6.1-sol | 50 | 2.5 | 250 |
 | gpt-6.1-terra | 25 | 1.25 | 125 |
 | gpt-6-sol | 50 | 5 | 250 |
@@ -265,12 +267,19 @@ service_tier: Some(Some("priority"))
 
 The Java app does not estimate `service_tier` for annotated rows. `AnnotateJob`
 stores `service_tier = NULL` and computes credits at the standard rate, and
-`RateCard` carries no Fast multiplier. OpenAI's pricing docs specify Fast at
-2.5× the Standard rate for included subscription usage and 2× for purchased
-credits and Enterprise pay-as-you-go usage, and Ultrafast on GPT-6 Astra and
-GPT-6.1 Sol at 8× and 6× respectively. GPT-6 estimates here still use only the
-Standard rate. A future implementation would apply the multiplier for the
-turn's speed mode and billing type once a reliable per-turn tier source exists.
+`RateCard` carries no Fast multiplier. OpenAI's pricing docs specify these
+multipliers on the Standard rate, by model and billing type:
+
+| speed mode | models | included subscription usage | purchased credits / Enterprise pay-as-you-go |
+|---|---|---:|---:|
+| Fast | GPT-6.2 Astra, GPT-6.2 Sol | 2× | 2× |
+| Fast | GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna | 2.5× | 2× |
+| Ultrafast | GPT-6.2 Astra, GPT-6.2 Sol | 6× | 3× through 2027-02-28, then 6× |
+| Ultrafast | GPT-6 Astra, GPT-6.1 Sol | 8× | 6× |
+
+GPT-6 estimates here still use only the Standard rate. A future implementation
+would apply the multiplier for the turn's speed mode and billing type once a
+reliable per-turn tier source exists.
 
 Important precision boundary: reliable service-tier values are turn-level
 request-config signals in `logs_2`, while token-bearing OTLP completion rows do
